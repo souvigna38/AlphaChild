@@ -5,6 +5,20 @@ Out of the box implementation based on the code of the tutorial: [AlphaZero](htt
 ![tictactoe](https://raw.githubusercontent.com/foersterrobert/AlphaZero/master/assets/tictactoe.gif)
 ![connectfour](https://raw.githubusercontent.com/foersterrobert/AlphaZero/master/assets/connectfour.gif)
 
+### Local setup (Cursor agents & developers)
+
+See **[AGENTS.md](AGENTS.md)** for step-by-step instructions: clone, virtualenv, `pip install -e ".[dev,atari]"`, run tests, and start Jupyter.
+
+Quick start:
+
+```bash
+git clone https://github.com/souvigna38/AlphaChild.git && cd AlphaChild
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev,atari]"
+python3 -m pytest tests/ -v
+jupyter lab
+```
+
 ### MuZero + Gym / Atari (notebooks 11–16)
 
 After the AlphaZero series, notebooks **11–13** introduce MuZero on board games. **14–16** extend the same style to [Gymnasium](https://gymnasium.farama.org/) and Atari (frame stacking, visual encoder, single-agent MCTS).
