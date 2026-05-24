@@ -18,6 +18,10 @@ SKIP_PATTERNS = [
     r'\.learn\(\)',
     r'alphaZero\.learn',
     r'alphaZeroParallel\.learn',
+    r'muzero\.learn',
+    r'muzero_atari\.learn',
+    r'AtariGym\(',
+    r'ALE/',
 ]
 
 

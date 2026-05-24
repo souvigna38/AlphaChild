@@ -2,12 +2,14 @@
 
 ## Cursor Cloud specific instructions
 
-This is a pure-Python Jupyter notebook project implementing AlphaZero for board games (TicTacToe, Connect Four). There are no traditional services to start — all code lives in 10 numbered `.ipynb` notebooks, with reusable classes extracted into the `alphazero/` package.
+This is a pure-Python Jupyter notebook project implementing AlphaZero for board games (TicTacToe, Connect Four) and MuZero for Gym / Atari. There are no traditional services to start — all code lives in numbered `.ipynb` notebooks, with reusable classes extracted into the `alphazero/` package.
 
 ### Project structure
 
-- **Notebooks** (`1.TicTacToe.ipynb` through `10.Eval.ipynb`): Tutorial progression
-- **`alphazero/`**: Extracted Python package with `games.py`, `model.py`, `mcts.py`
+- **Notebooks** (`1.TicTacToe.ipynb` through `10.Eval.ipynb`): AlphaZero tutorial progression
+- **MuZero notebooks** (`11.MuZeroModel.ipynb`–`13.MuZeroTrain.ipynb`): Board-game MuZero
+- **Gym / Atari** (`14.MuZeroGym.ipynb`–`16.MuZeroAtariTrain.ipynb`): Gymnasium wrapper, Atari model, training
+- **`alphazero/`**: Extracted package (`games.py`, `model.py`, `mcts.py`, `gym_env.py`, `muzero_atari.py`, `muzero_gym.py`)
 - **`tests/`**: pytest test suite covering games, model, MCTS, and notebook syntax
 - **`*.pt` files**: Pre-trained model weights for TicTacToe and ConnectFour
 
@@ -25,7 +27,16 @@ Config is in `pyproject.toml`. Rules: pycodestyle, pyflakes, isort, pyupgrade, f
 python3 -m pytest tests/ -v
 ```
 
-71 tests covering TicTacToe logic, ConnectFour logic, ResNet model, MCTS search, pre-trained model loading, and notebook cell syntax validation. Non-interactive notebook cells are also tested by execution.
+Tests cover TicTacToe logic, ConnectFour logic, ResNet model, MCTS search, MuZero Gym (CartPole), pre-trained model loading, and notebook cell syntax validation. Non-interactive notebook cells are also tested by execution.
+
+### Gym / Atari optional dependencies
+
+```
+pip install -e ".[gym]"        # CartPole and vector envs
+pip install -e ".[atari]"      # Atari ROMs (accept license on first import)
+```
+
+Notebook cells that import `ALE/` or `AtariGym` are skipped in automated notebook syntax tests when ROMs are unavailable.
 
 ### Notebook caveats
 
