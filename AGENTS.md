@@ -2,22 +2,38 @@
 
 ## Cursor Cloud specific instructions
 
-This is a pure-Python Jupyter notebook project implementing AlphaZero for board games (TicTacToe, Connect Four). There are no traditional services to start — all code lives in 10 numbered `.ipynb` notebooks.
+This is a pure-Python Jupyter notebook project implementing AlphaZero for board games (TicTacToe, Connect Four). There are no traditional services to start — all code lives in 10 numbered `.ipynb` notebooks, with reusable classes extracted into the `alphazero/` package.
 
-### Dependencies
+### Project structure
 
-Installed via pip: `numpy`, `torch` (CPU), `matplotlib`, `tqdm`, `ipykernel`, `jupyter`. No `requirements.txt` exists; the update script handles installation.
+- **Notebooks** (`1.TicTacToe.ipynb` through `10.Eval.ipynb`): Tutorial progression
+- **`alphazero/`**: Extracted Python package with `games.py`, `model.py`, `mcts.py`
+- **`tests/`**: pytest test suite covering games, model, MCTS, and notebook syntax
+- **`*.pt` files**: Pre-trained model weights for TicTacToe and ConnectFour
 
-### Running notebooks
+### Linting
 
-- All notebooks reference a kernel named `myenv` (the original author's environment). Override with `--ExecutePreprocessor.kernel_name=python3` when using `jupyter nbconvert --execute`.
-- Several notebooks (1, 2, 3, 4, 5) contain interactive `input()` calls for playing games, so they cannot be fully executed non-interactively. To test non-interactive cells, extract code into a standalone `.py` script or use `nbclient` programmatically on selected cells.
-- Pre-trained model weights (`model_2.pt`, `model_7_ConnectFour.pt`) are committed to the repo and can be loaded with `torch.load(..., map_location="cpu", weights_only=True)`.
+```
+ruff check alphazero/ tests/
+```
+
+Config is in `pyproject.toml`. Rules: pycodestyle, pyflakes, isort, pyupgrade, flake8-bugbear.
 
 ### Testing
 
-There is no test suite or linter configured. Validation is done by running notebook cells or extracting code into scripts. A quick smoke test: import all key libraries and load a pre-trained model to verify the environment works.
+```
+python3 -m pytest tests/ -v
+```
+
+71 tests covering TicTacToe logic, ConnectFour logic, ResNet model, MCTS search, pre-trained model loading, and notebook cell syntax validation. Non-interactive notebook cells are also tested by execution.
+
+### Notebook caveats
+
+- All notebooks reference a kernel named `myenv` (the original author's environment). Override with `--ExecutePreprocessor.kernel_name=python3` when using `jupyter nbconvert --execute`.
+- Every notebook has one interactive `input()` cell (human-vs-AI game loop) that cannot run non-interactively. The test suite skips these cells automatically.
+- Training cells (`.learn()`) are also skipped in tests to keep them fast.
+- Pre-trained model weights can be loaded with `torch.load(..., map_location="cpu", weights_only=True)`.
 
 ### PATH note
 
-Pip installs scripts to `~/.local/bin`. Ensure `PATH` includes this directory (e.g., `export PATH="$HOME/.local/bin:$PATH"`) when running `jupyter` commands.
+Pip installs scripts to `~/.local/bin`. Ensure `PATH` includes this directory (e.g., `export PATH="$HOME/.local/bin:$PATH"`) when running `jupyter`, `ruff`, or `pytest` commands.
