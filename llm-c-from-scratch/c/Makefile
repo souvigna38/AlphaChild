@@ -4,17 +4,21 @@ CFLAGS ?= -O2 -Wall -Wextra -std=c11
 LDFLAGS ?= -lm
 
 BIN_V4 = bin/train_deepseek_v4_tiny
+BIN_SWIGLU = bin/test_swiglu
+BIN_HASH_MOE = bin/test_hash_moe
 BIN_MLA = bin/test_mla
 BIN_MOE = bin/test_moe
 BIN_BLOCK = bin/test_block
 BIN_TRAIN = bin/train_v2_tiny
-SRCS_V4 = deepseek_v4_config.c rmsnorm.c train_deepseek_v4_tiny.c
+SRCS_V4 = deepseek_v4_config.c rmsnorm.c swiglu.c hash_moe.c train_deepseek_v4_tiny.c
+SRCS_SWIGLU = swiglu.c test_swiglu.c
+SRCS_HASH_MOE = deepseek_v4_config.c swiglu.c hash_moe.c test_hash_moe.c
 SRCS_MLA = deepseek_v2/ops.c deepseek_v2/mla.c deepseek_v2/test_mla.c
 SRCS_MOE = deepseek_v2/ops.c deepseek_v2/moe.c deepseek_v2/test_moe.c
 SRCS_BLOCK = rmsnorm.c deepseek_v2/ops.c deepseek_v2/block.c deepseek_v2/mla.c deepseek_v2/moe.c deepseek_v2/test_block.c
 SRCS_TRAIN = rmsnorm.c deepseek_v2/ops.c deepseek_v2/data.c deepseek_v2/adamw.c deepseek_v2/model.c deepseek_v2/block.c deepseek_v2/block_train.c deepseek_v2/mla.c deepseek_v2/moe.c deepseek_v2/moe_train.c deepseek_v2/train_v2_tiny.c
 
-.PHONY: all clean test test_mla test_moe test_block test_v2 test_train_v2
+.PHONY: all clean test test_v4 test_mla test_moe test_block test_v2 test_train_v2
 
 all: $(BIN_V4) $(BIN_MLA) $(BIN_MOE) $(BIN_BLOCK) $(BIN_TRAIN)
 
@@ -28,6 +32,19 @@ $(BIN_MLA): $(SRCS_MLA)
 
 test: $(BIN_V4)
 	./$(BIN_V4)
+
+test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE)
+	./$(BIN_V4)
+	./$(BIN_SWIGLU)
+	./$(BIN_HASH_MOE)
+
+$(BIN_SWIGLU): $(SRCS_SWIGLU)
+	mkdir -p bin
+	$(CC) $(CFLAGS) -o $@ $(SRCS_SWIGLU) $(LDFLAGS)
+
+$(BIN_HASH_MOE): $(SRCS_HASH_MOE)
+	mkdir -p bin
+	$(CC) $(CFLAGS) -o $@ $(SRCS_HASH_MOE) $(LDFLAGS)
 
 test_mla: $(BIN_MLA)
 	./$(BIN_MLA)

@@ -12,8 +12,9 @@ So for **piece-by-piece learning** after `llm.c`, we recommend:
 
 ```
 Notebooks 1–10   GPT-2 / llm.c ideas (PyTorch)
-Notebooks 11–16  DeepSeek-V2 (MLA + MoE)  ← you are here
-(later)          DeepSeek-V4 (mHC + CSA/HCA) in c/ + notebooks
+Notebooks 11–17  DeepSeek-V2 (MLA + MoE + C train/backward)
+Notebook 18       DeepSeek-V4 kickoff (hash-MoE, SwiGLU) — `c/swiglu.c`, `c/hash_moe.c`
+(later)          V4 sliding / CSA / HCA / mHC in c/
 ```
 
 If you literally need the **first** DeepSeek checkpoint family, treat it as “pre-V2 dense LM” and skip to V2 for new mechanisms.
@@ -28,8 +29,10 @@ If you literally need the **first** DeepSeek checkpoint family, treat it as “p
 | 14 | Full V2 block | transformer loop in `train_gpt2.c` | `block.c` ✓ |
 | 15 | Training | main training loop | `train_v2_tiny.c` ✓ |
 | 16 | Sampling | generation + export | `-sample -ckpt` ✓ |
+| 17 | V2 backward / full train | `block_train.c`, `-train-full` | ✓ |
+| 18 | V4 roadmap + hash-MoE | `swiglu.c`, `hash_moe.c` | `make test_v4` ✓ |
 
-Matching **commented C** ports live under `c/deepseek_v2/` (added piece by piece).
+Matching **commented C** ports live under `c/deepseek_v2/` (V2) and top-level `c/` (V4 phases 0–2).
 
 **Phase 5:** MLA backward + `train_v2_tiny -train-1layer` (MoE frozen).
 
