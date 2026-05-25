@@ -27,7 +27,7 @@ A **step-by-step Jupyter tutorial** that teaches the ideas behind [karpathy/llm.
 
 See **[docs/DEEPSEEK_VERSION_LADDER.md](docs/DEEPSEEK_VERSION_LADDER.md)** — we teach **V2** (not “V1”) after llm.c/GPT-2.
 
-**C port (piece by piece):** `c/deepseek_v2/mla.c` mirrors notebook 12; run `cd c && make test_mla`.
+**C port:** `cd c && make test_v2` (MLA, MoE, block, trainer). Export weights: `python scripts/export_v2_tiny.py --match-train-c`.
 
 ## Quick start
 

@@ -9,7 +9,7 @@ This folder mirrors **notebooks 11–16** in commented C, the same way `vendor/l
 | 1 | `mla.c` | 12 — MLA |
 | 2 | `moe.c` | 13 — DeepSeekMoE |
 | 3 | `block.c` | 14 — full block |
-| 4 | `train_v2_tiny.c` (TODO) | 15–16 |
+| 4 | `train_v2_tiny.c` | 15–16 train + sample |
 
 Build MLA smoke test from repo root:
 

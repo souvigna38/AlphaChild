@@ -26,7 +26,7 @@ If you literally need the **first** DeepSeek checkpoint family, treat it as “p
 | 12 | MLA | `attention` + KV cache size |
 | 13 | DeepSeekMoE | (no MoE in GPT-2 — new) | `moe.c` ✓ |
 | 14 | Full V2 block | transformer loop in `train_gpt2.c` | `block.c` ✓ |
-| 15 | Training | main training loop |
-| 16 | Sampling | generation at end of `train_gpt2.c` |
+| 15 | Training | main training loop | `train_v2_tiny.c` ✓ |
+| 16 | Sampling | generation + export | `-sample -ckpt` ✓ |
 
 Matching **commented C** ports live under `c/deepseek_v2/` (added piece by piece).
