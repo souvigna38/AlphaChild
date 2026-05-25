@@ -1,6 +1,6 @@
 /*
  * Tiny DeepSeek-V2 model — forward, loss, sample (notebook 14–16).
- * Training backward for all layers is Phase 5; use PyTorch notebook 15 for full training.
+ * Phase 5/5b C training helpers; use PyTorch notebook 15 for long training runs.
  */
 #ifndef DEEPSEEK_V2_MODEL_H
 #define DEEPSEEK_V2_MODEL_H
@@ -97,5 +97,18 @@ float dsv2_model_train_step_1layer(
     float *activations,
     float *logits,
     float *grad_memory);
+
+/* Phase 5b: all layers, MLA + MoE backward (B must be 1) */
+size_t dsv2_model_train_working_bytes(const Dsv2ModelConfig *cfg, int T);
+float dsv2_model_train_step_full(
+    Dsv2Model *m,
+    const int *idx,
+    const int *targets,
+    int T,
+    float lr,
+    float *activations,
+    float *logits,
+    float *grad_memory,
+    int *moe_topi);
 
 #endif /* DEEPSEEK_V2_MODEL_H */

@@ -31,4 +31,6 @@ If you literally need the **first** DeepSeek checkpoint family, treat it as “p
 
 Matching **commented C** ports live under `c/deepseek_v2/` (added piece by piece).
 
-**Phase 5:** MLA backward + `train_v2_tiny -train-1layer` (MoE frozen). MoE backward = Phase 5b.
+**Phase 5:** MLA backward + `train_v2_tiny -train-1layer` (MoE frozen).
+
+**Phase 5b:** MoE + block backward (`moe_train.c`, `block_train.c`) + `-train-full` (2 layers, B=1, global grad clip). PyTorch `Trainer` in notebook 15 remains the path for long runs.
