@@ -9,8 +9,11 @@
  */
 #include "mla.h"
 
+#include "ops.h"
+
 #include <math.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* -------------------------------------------------------------------------- */
@@ -52,17 +55,22 @@ size_t dsv2_mla_c_kv_bytes(const Dsv2MlaConfig *cfg, int T) {
 }
 
 size_t dsv2_mla_scratch_bytes(const Dsv2MlaConfig *cfg, int T) {
+    return dsv2_mla_train_scratch_bytes(cfg, T);
+}
+
+size_t dsv2_mla_train_scratch_bytes(const Dsv2MlaConfig *cfg, int T) {
     int C = cfg->n_embd;
     int NH = cfg->n_head;
     int hs = C / NH;
     int r = cfg->kv_lora_rank;
-    /* q_flat, k_heads, v_heads, preatt (NH*T*T), att same, head_out */
     size_t n = 0;
-    n += (size_t)T * C;           /* q per token flat */
-    n += (size_t)NH * T * hs * 2; /* k and v per head */
-    n += (size_t)r;               /* c_kv one token */
-    n += (size_t)NH * T * T * 2;  /* preatt + att */
-    n += (size_t)C;               /* head merge buffer */
+    n += (size_t)T * C;             /* x_in */
+    n += (size_t)T * C;             /* q */
+    n += (size_t)NH * T * hs * 2;   /* k,v heads */
+    n += (size_t)T * (size_t)r;     /* c_kv all tokens */
+    n += (size_t)NH * T * T * 2;    /* preatt, att */
+    n += (size_t)T * C;             /* pre_wo */
+    n += (size_t)C;                 /* head tmp */
     return n * sizeof(float);
 }
 
@@ -190,4 +198,205 @@ void dsv2_mla_forward(
         linear(wo, out + t * C, tmp, C, C);
         memcpy(out + t * C, tmp, (size_t)C * sizeof(float));
     }
+}
+
+void dsv2_mla_forward_train(
+    float *out,
+    const float *x,
+    const Dsv2MlaConfig *cfg,
+    int T,
+    const float *wq,
+    const float *w_dkv,
+    const float *w_uk,
+    const float *w_uv,
+    const float *wo,
+    float *scratch) {
+    const int C = cfg->n_embd;
+    float *x_in = scratch;
+    float *q_flat = x_in + (size_t)T * (size_t)C;
+    float *k_heads = q_flat + (size_t)T * (size_t)C;
+    const int NH = cfg->n_head;
+    const int hs = C / NH;
+    const int r = cfg->kv_lora_rank;
+    float *v_heads = k_heads + (size_t)NH * (size_t)T * (size_t)hs;
+    float *c_kv_all = v_heads + (size_t)NH * (size_t)T * (size_t)hs;
+    float *preatt = c_kv_all + (size_t)T * (size_t)r;
+    float *att = preatt + (size_t)NH * (size_t)T * (size_t)T;
+    float *pre_wo = att + (size_t)NH * (size_t)T * (size_t)T;
+    float *head_out = pre_wo + (size_t)T * (size_t)C;
+    const float scale = 1.0f / sqrtf((float)hs);
+
+    memset(pre_wo, 0, (size_t)T * (size_t)C * sizeof(float));
+    for (int t = 0; t < T; t++) {
+        dsv2_linear_forward(wq, x_in + (size_t)t * (size_t)C, q_flat + (size_t)t * (size_t)C, C, C);
+        dsv2_linear_forward(w_dkv, x_in + (size_t)t * (size_t)C, c_kv_all + (size_t)t * (size_t)r, r, C);
+        float k_full[C], v_full[C];
+        dsv2_linear_forward(w_uk, c_kv_all + (size_t)t * (size_t)r, k_full, C, r);
+        dsv2_linear_forward(w_uv, c_kv_all + (size_t)t * (size_t)r, v_full, C, r);
+        for (int h = 0; h < NH; h++) {
+            memcpy(k_heads + (size_t)h * (size_t)T * (size_t)hs + (size_t)t * (size_t)hs, k_full + (size_t)h * (size_t)hs, (size_t)hs * sizeof(float));
+            memcpy(v_heads + (size_t)h * (size_t)T * (size_t)hs + (size_t)t * (size_t)hs, v_full + (size_t)h * (size_t)hs, (size_t)hs * sizeof(float));
+        }
+    }
+    for (int h = 0; h < NH; h++) {
+        for (int t = 0; t < T; t++) {
+            const float *qt = q_flat + (size_t)t * (size_t)C + (size_t)h * (size_t)hs;
+            float *preatt_bth = preatt + (size_t)h * (size_t)T * (size_t)T + (size_t)t * (size_t)T;
+            float *att_bth = att + (size_t)h * (size_t)T * (size_t)T + (size_t)t * (size_t)T;
+            float maxv = -1e9f;
+            for (int t2 = 0; t2 <= t; t2++) {
+                float val = dot(q_flat + (size_t)t * (size_t)C + (size_t)h * (size_t)hs, k_heads + (size_t)h * (size_t)T * (size_t)hs + (size_t)t2 * (size_t)hs, hs) * scale;
+                preatt_bth[t2] = val;
+                if (val > maxv) {
+                    maxv = val;
+                }
+            }
+            float expsum = 0.0f;
+            for (int t2 = 0; t2 <= t; t2++) {
+                float ev = expf(preatt_bth[t2] - maxv);
+                att_bth[t2] = ev;
+                expsum += ev;
+            }
+            float inv = expsum > 0.0f ? 1.0f / expsum : 0.0f;
+            for (int t2 = 0; t2 < T; t2++) {
+                att_bth[t2] = (t2 <= t) ? att_bth[t2] * inv : 0.0f;
+            }
+            memset(head_out, 0, (size_t)hs * sizeof(float));
+            for (int t2 = 0; t2 <= t; t2++) {
+                float w = att_bth[t2];
+                const float *vt2 = v_heads + (size_t)h * (size_t)T * (size_t)hs + (size_t)t2 * (size_t)hs;
+                for (int i = 0; i < hs; i++) {
+                    head_out[i] += w * vt2[i];
+                }
+            }
+            memcpy(pre_wo + (size_t)t * (size_t)C + (size_t)h * (size_t)hs, head_out, (size_t)hs * sizeof(float));
+        }
+    }
+    for (int t = 0; t < T; t++) {
+        dsv2_linear_forward(wo, pre_wo + (size_t)t * (size_t)C, out + (size_t)t * (size_t)C, C, C);
+    }
+}
+
+void dsv2_mla_backward(
+    float *dx,
+    float *dwq,
+    float *dw_dkv,
+    float *dw_uk,
+    float *dw_uv,
+    float *dwo,
+    const float *dout,
+    const Dsv2MlaConfig *cfg,
+    int T,
+    const float *wq,
+    const float *w_dkv,
+    const float *w_uk,
+    const float *w_uv,
+    const float *wo,
+    float *scratch) {
+    const int C = cfg->n_embd;
+    const int NH = cfg->n_head;
+    const int hs = C / NH;
+    const int r = cfg->kv_lora_rank;
+    const float scale = 1.0f / sqrtf((float)hs);
+
+    float *x_in = scratch;
+    float *q_flat = x_in + (size_t)T * (size_t)C;
+    float *k_heads = q_flat + (size_t)T * (size_t)C;
+    float *v_heads = k_heads + (size_t)NH * (size_t)T * (size_t)hs;
+    float *c_kv_all = v_heads + (size_t)NH * (size_t)T * (size_t)hs;
+    float *preatt = c_kv_all + (size_t)T * (size_t)r;
+    float *att = preatt + (size_t)NH * (size_t)T * (size_t)T;
+    float *pre_wo = att + (size_t)NH * (size_t)T * (size_t)T;
+
+    float dpre_wo[T * C];
+    memset(dx, 0, (size_t)T * (size_t)C * sizeof(float));
+    memset(dpre_wo, 0, sizeof(dpre_wo));
+
+    for (int t = 0; t < T; t++) {
+        dsv2_linear_backward(dpre_wo + (size_t)t * (size_t)C, dwo, dout + (size_t)t * (size_t)C, pre_wo + (size_t)t * (size_t)C, C, C);
+    }
+
+    float *datt = (float *)calloc((size_t)NH * (size_t)T * (size_t)T, sizeof(float));
+    float *dpreatt = (float *)calloc((size_t)NH * (size_t)T * (size_t)T, sizeof(float));
+    float *dk_heads = (float *)calloc((size_t)NH * (size_t)T * (size_t)hs, sizeof(float));
+    float *dv_heads = (float *)calloc((size_t)NH * (size_t)T * (size_t)hs, sizeof(float));
+
+    for (int h = 0; h < NH; h++) {
+        for (int t = 0; t < T; t++) {
+            const float *att_bth = att + (size_t)h * (size_t)T * (size_t)T + (size_t)t * (size_t)T;
+            float *datt_bth = datt + (size_t)h * (size_t)T * (size_t)T + (size_t)t * (size_t)T;
+            float *dpreatt_bth = dpreatt + (size_t)h * (size_t)T * (size_t)T + (size_t)t * (size_t)T;
+            const float *dout_h = dpre_wo + (size_t)t * (size_t)C + (size_t)h * (size_t)hs;
+
+            for (int t2 = 0; t2 <= t; t2++) {
+                const float *vt2 = v_heads + (size_t)h * (size_t)T * (size_t)hs + (size_t)t2 * (size_t)hs;
+                for (int i = 0; i < hs; i++) {
+                    datt_bth[t2] += vt2[i] * dout_h[i];
+                }
+            }
+            for (int t2 = 0; t2 <= t; t2++) {
+                for (int t3 = 0; t3 <= t; t3++) {
+                    float indicator = (t2 == t3) ? 1.0f : 0.0f;
+                    dpreatt_bth[t3] += att_bth[t2] * (indicator - att_bth[t3]) * datt_bth[t2];
+                }
+            }
+            const float *qt = q_flat + (size_t)t * (size_t)C + (size_t)h * (size_t)hs;
+            for (int t2 = 0; t2 <= t; t2++) {
+                float *dkt2 = dk_heads + (size_t)h * (size_t)T * (size_t)hs + (size_t)t2 * (size_t)hs;
+                float g = dpreatt_bth[t2] * scale;
+                for (int i = 0; i < hs; i++) {
+                    dkt2[i] += qt[i] * g;
+                }
+            }
+            for (int t2 = 0; t2 <= t; t2++) {
+                float *dvt2 = dv_heads + (size_t)h * (size_t)T * (size_t)hs + (size_t)t2 * (size_t)hs;
+                for (int i = 0; i < hs; i++) {
+                    dvt2[i] += att_bth[t2] * dout_h[i];
+                }
+            }
+        }
+    }
+
+    float *dk_full = (float *)calloc((size_t)T * (size_t)C, sizeof(float));
+    float *dv_full = (float *)calloc((size_t)T * (size_t)C, sizeof(float));
+    for (int t = 0; t < T; t++) {
+        for (int h = 0; h < NH; h++) {
+            memcpy(
+                dk_full + (size_t)t * (size_t)C + (size_t)h * (size_t)hs,
+                dk_heads + (size_t)h * (size_t)T * (size_t)hs + (size_t)t * (size_t)hs,
+                (size_t)hs * sizeof(float));
+            memcpy(
+                dv_full + (size_t)t * (size_t)C + (size_t)h * (size_t)hs,
+                dv_heads + (size_t)h * (size_t)T * (size_t)hs + (size_t)t * (size_t)hs,
+                (size_t)hs * sizeof(float));
+        }
+    }
+
+    float *dc_kv = (float *)calloc((size_t)T * (size_t)r, sizeof(float));
+    float *dq = (float *)calloc((size_t)T * (size_t)C, sizeof(float));
+    for (int t = 0; t < T; t++) {
+        dsv2_linear_backward(dc_kv + (size_t)t * (size_t)r, dw_uk, dk_full + (size_t)t * (size_t)C, c_kv_all + (size_t)t * (size_t)r, C, r);
+        dsv2_linear_backward(dc_kv + (size_t)t * (size_t)r, dw_uv, dv_full + (size_t)t * (size_t)C, c_kv_all + (size_t)t * (size_t)r, C, r);
+        dsv2_linear_backward(dx + (size_t)t * (size_t)C, dw_dkv, dc_kv + (size_t)t * (size_t)r, x_in + (size_t)t * (size_t)C, r, C);
+        dsv2_linear_backward(dq + (size_t)t * (size_t)C, dwq, q_flat + (size_t)t * (size_t)C, x_in + (size_t)t * (size_t)C, C, C);
+    }
+    for (int t = 0; t < T; t++) {
+        for (int c = 0; c < C; c++) {
+            dx[(size_t)t * (size_t)C + (size_t)c] += dq[(size_t)t * (size_t)C + (size_t)c];
+        }
+    }
+
+    free(dq);
+    free(dk_full);
+    free(dv_full);
+    free(dc_kv);
+    free(datt);
+    free(dpreatt);
+    free(dk_heads);
+    free(dv_heads);
+    (void)wq;
+    (void)w_dkv;
+    (void)w_uk;
+    (void)w_uv;
+    (void)wo;
 }

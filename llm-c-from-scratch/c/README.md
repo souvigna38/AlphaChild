@@ -38,5 +38,6 @@ cd llm-c-from-scratch
 | `deepseek_v2/mla.c` | MLA (notebook 12) |
 | `deepseek_v2/moe.c` | MoE (notebook 13) |
 | `deepseek_v2/block.c` | One block (notebook 14) |
-| `train_v2_tiny.c` | **TODO** full trainer (notebooks 15–16) |
+| `train_v2_tiny.c` | Train + sample (15–16); `-train-1layer` Phase 5 |
+| `mla.c` backward | `dsv2_mla_backward` (notebook 17) |
 | `mhc.c`, … | V4 only |

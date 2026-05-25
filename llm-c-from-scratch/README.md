@@ -24,6 +24,7 @@ A **step-by-step Jupyter tutorial** that teaches the ideas behind [karpathy/llm.
 | 14 | `14.DeepSeekV2Model.ipynb` | Full tiny DeepSeek-V2 |
 | 15 | `15.TrainDeepSeekV2.ipynb` | Train on tiny Shakespeare |
 | 16 | `16.SampleDeepSeekV2.ipynb` | Generate text |
+| 17 | `17.Phase5CBackward.ipynb` | C backward (MLA, 1-layer train) |
 
 See **[docs/DEEPSEEK_VERSION_LADDER.md](docs/DEEPSEEK_VERSION_LADDER.md)** — we teach **V2** (not “V1”) after llm.c/GPT-2.
 

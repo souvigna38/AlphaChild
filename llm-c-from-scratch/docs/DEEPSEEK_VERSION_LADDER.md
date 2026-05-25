@@ -30,3 +30,5 @@ If you literally need the **first** DeepSeek checkpoint family, treat it as “p
 | 16 | Sampling | generation + export | `-sample -ckpt` ✓ |
 
 Matching **commented C** ports live under `c/deepseek_v2/` (added piece by piece).
+
+**Phase 5:** MLA backward + `train_v2_tiny -train-1layer` (MoE frozen). MoE backward = Phase 5b.

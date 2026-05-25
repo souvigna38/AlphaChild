@@ -5,6 +5,7 @@
 #include "model.h"
 
 #include "../rmsnorm.h"
+#include "ops.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -310,4 +311,101 @@ int dsv2_model_load_checkpoint(Dsv2Model *m, const char *path) {
     }
     fclose(f);
     return 0;
+}
+
+static void sgd_update(float *w, const float *dw, size_t n, float lr) {
+    for (size_t i = 0; i < n; i++) {
+        w[i] -= lr * dw[i];
+    }
+}
+
+float dsv2_model_train_step_1layer(
+    Dsv2Model *m,
+    const int *idx,
+    const int *targets,
+    int B,
+    int T,
+    float lr,
+    float *activations,
+    float *logits,
+    float *grad_memory) {
+    if (m->cfg.n_layer != 1 || B != 1) {
+        return 0.0f;
+    }
+    const int C = m->cfg.n_embd;
+    const int V = m->cfg.vocab_size;
+    const int r = m->cfg.kv_lora_rank;
+
+    float *dw = grad_memory;
+    float *drest = grad_memory + dsv2_model_param_bytes(&m->cfg) / sizeof(float);
+    memset(dw, 0, dsv2_model_param_bytes(&m->cfg));
+
+    dsv2_model_forward(logits, idx, m, 1, T, activations);
+    float loss = dsv2_cross_entropy_loss(logits, targets, 1, T, V, C);
+
+    float *dlogits = drest;
+    float maxv;
+    for (int t = 0; t < T; t++) {
+        const float *lg = logits + (size_t)t * (size_t)V;
+        int y = targets[t];
+        maxv = lg[0];
+        for (int v = 1; v < V; v++) {
+            if (lg[v] > maxv) {
+                maxv = lg[v];
+            }
+        }
+        float sum = 0.0f;
+        for (int v = 0; v < V; v++) {
+            sum += expf(lg[v] - maxv);
+        }
+        float inv = 1.0f / sum;
+        for (int v = 0; v < V; v++) {
+            float p = expf(lg[v] - maxv) * inv;
+            dlogits[(size_t)t * (size_t)V + (size_t)v] = (p - (v == y ? 1.0f : 0.0f)) / (float)T;
+        }
+    }
+
+    float *x = activations;
+    float *hf = x + (size_t)T * (size_t)C;
+    float *dx_hf = drest + (size_t)T * (size_t)V;
+    float *da = dx_hf + (size_t)T * (size_t)C;
+    float *dln1 = da + (size_t)T * (size_t)C;
+    float *dx_embed = dln1 + (size_t)T * (size_t)C;
+    float *mla_scr = dx_embed + (size_t)T * (size_t)C;
+    float *attn_out = mla_scr + dsv2_mla_train_scratch_bytes(
+        &(Dsv2MlaConfig){.n_embd = C, .n_head = m->cfg.n_head, .kv_lora_rank = r, .block_size = m->cfg.block_size},
+        T) /
+        sizeof(float);
+    float *ln1_out = attn_out + (size_t)T * (size_t)C;
+
+    Dsv2MlaConfig acfg = {.n_embd = C, .n_head = m->cfg.n_head, .kv_lora_rank = r, .block_size = m->cfg.block_size};
+
+    for (int t = 0; t < T; t++) {
+        dsv2_linear_backward(dx_hf + (size_t)t * (size_t)C, dw, dlogits + (size_t)t * (size_t)V, hf + (size_t)t * (size_t)C, V, C);
+    }
+    ds4_rmsnorm_backward(dx_hf, dw + (m->rms_f - m->memory), dx_hf, hf, hf, m->rms_f, T, C, m->cfg.rms_eps);
+
+    /* MoE frozen: all gradient flows through attention branch only */
+    dsv2_mla_forward_train(attn_out, x, &acfg, T, m->wq, m->w_dkv, m->w_uk, m->w_uv, m->wo, mla_scr);
+    ds4_rmsnorm_forward(ln1_out, x, m->rms1_w, T, C, m->cfg.rms_eps);
+    dsv2_mla_backward(dln1, dw + (m->wq - m->memory), dw + (m->w_dkv - m->memory), dw + (m->w_uk - m->memory), dw + (m->w_uv - m->memory), dw + (m->wo - m->memory), dx_hf, &acfg, T, m->wq, m->w_dkv, m->w_uk, m->w_uv, m->wo, mla_scr);
+    ds4_rmsnorm_backward(dx_embed, dw + (m->rms1_w - m->memory), dln1, x, ln1_out, m->rms1_w, T, C, m->cfg.rms_eps);
+
+    for (int t = 0; t < T; t++) {
+        int tok = idx[t];
+        for (int c = 0; c < C; c++) {
+            m->wte[(size_t)tok * (size_t)C + (size_t)c] -= lr * dx_embed[(size_t)t * (size_t)C + (size_t)c];
+        }
+    }
+
+    sgd_update(m->wte, dw, (size_t)V * (size_t)C, lr);
+    sgd_update(m->rms1_w, dw + (m->rms1_w - m->memory), (size_t)C, lr);
+    sgd_update(m->wq, dw + (m->wq - m->memory), (size_t)C * (size_t)C, lr);
+    sgd_update(m->w_dkv, dw + (m->w_dkv - m->memory), (size_t)r * (size_t)C, lr);
+    sgd_update(m->w_uk, dw + (m->w_uk - m->memory), (size_t)C * (size_t)r, lr);
+    sgd_update(m->w_uv, dw + (m->w_uv - m->memory), (size_t)C * (size_t)r, lr);
+    sgd_update(m->wo, dw + (m->wo - m->memory), (size_t)C * (size_t)C, lr);
+    sgd_update(m->rms_f, dw + (m->rms_f - m->memory), (size_t)C, lr);
+
+    return loss;
 }

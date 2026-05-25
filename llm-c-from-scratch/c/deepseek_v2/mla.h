@@ -30,6 +30,9 @@ typedef struct {
 size_t dsv2_mla_c_kv_bytes(const Dsv2MlaConfig *cfg, int T);
 size_t dsv2_mla_scratch_bytes(const Dsv2MlaConfig *cfg, int T);
 
+/* Training scratch = forward buffers + x_in + pre_wo (Phase 5) */
+size_t dsv2_mla_train_scratch_bytes(const Dsv2MlaConfig *cfg, int T);
+
 /*
  * Forward MLA on input x (T, C), write output out (T, C).
  *
@@ -48,6 +51,39 @@ void dsv2_mla_forward(
     float *out,
     float *c_kv_out,
     const float *x,
+    const Dsv2MlaConfig *cfg,
+    int T,
+    const float *wq,
+    const float *w_dkv,
+    const float *w_uk,
+    const float *w_uv,
+    const float *wo,
+    float *scratch);
+
+/*
+ * Forward for training: saves activations in scratch for backward (B=1).
+ * Layout documented in mla.c; use dsv2_mla_train_scratch_bytes.
+ */
+void dsv2_mla_forward_train(
+    float *out,
+    const float *x,
+    const Dsv2MlaConfig *cfg,
+    int T,
+    const float *wq,
+    const float *w_dkv,
+    const float *w_uk,
+    const float *w_uv,
+    const float *wo,
+    float *scratch);
+
+void dsv2_mla_backward(
+    float *dx,
+    float *dwq,
+    float *dw_dkv,
+    float *dw_uk,
+    float *dw_uv,
+    float *dwo,
+    const float *dout,
     const Dsv2MlaConfig *cfg,
     int T,
     const float *wq,

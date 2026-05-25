@@ -15,7 +15,8 @@ Build MLA smoke test from repo root:
 
 ```bash
 cd llm-c-from-scratch/c
-make test_v2    # mla + moe + block
+make test_v2           # mla + moe + block + trainer smoke
+make bin/train_v2_tiny # full trainer binary
 make test_mla
 ```
 

@@ -6,9 +6,10 @@
  * Modes:
  *   ./bin/train_v2_tiny              forward-only loss demo (random weights)
  *   ./bin/train_v2_tiny -train-head  SGD on tied embedding/lm_head only (demo)
+ *   ./bin/train_v2_tiny -train-1layer N  Phase 5: MLA+RMSNorm+wte (1 layer, MoE frozen)
  *   ./bin/train_v2_tiny -sample -ckpt path.bin  greedy generation
  *
- * Full MoE+MLA backward in C is Phase 5 — use PyTorch Trainer for real training.
+ * Full MoE backward in C is Phase 5b — use PyTorch Trainer for all experts.
  */
 
 #include "data.h"
@@ -21,7 +22,7 @@
 static void usage(const char *argv0) {
     fprintf(
         stderr,
-        "Usage: %s [-train-head STEPS] [-sample] [-ckpt file] [-data path]\n",
+        "Usage: %s [-train-head STEPS] [-train-1layer STEPS] [-sample] [-ckpt file] [-data path]\n",
         argv0);
 }
 
@@ -63,11 +64,14 @@ int main(int argc, char **argv) {
     const char *data_path = "../data/tiny_shakespeare.txt";
     const char *ckpt = NULL;
     int train_head_steps = 0;
+    int train_1layer_steps = 0;
     int do_sample = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-train-head") == 0 && i + 1 < argc) {
             train_head_steps = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-train-1layer") == 0 && i + 1 < argc) {
+            train_1layer_steps = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-sample") == 0) {
             do_sample = 1;
         } else if (strcmp(argv[i], "-ckpt") == 0 && i + 1 < argc) {
@@ -93,7 +97,7 @@ int main(int argc, char **argv) {
     Dsv2ModelConfig cfg = {
         .vocab_size = ds.vocab.vocab_size,
         .block_size = 32,
-        .n_layer = 2,
+        .n_layer = train_1layer_steps > 0 ? 1 : 2,
         .n_embd = 64,
         .n_head = 4,
         .kv_lora_rank = 16,
@@ -121,7 +125,7 @@ int main(int argc, char **argv) {
         return 0;
     }
 
-    const int B = 4;
+    int B = 4;
     const int T = cfg.block_size;
     int *idx = (int *)malloc((size_t)B * (size_t)T * sizeof(int));
     int *targets = (int *)malloc((size_t)B * (size_t)T * sizeof(int));
@@ -150,6 +154,21 @@ int main(int argc, char **argv) {
                 printf("head step %d loss %.4f\n", step, loss);
             }
         }
+    }
+
+    if (train_1layer_steps > 0) {
+        printf("\n--- Phase 5: 1-layer C train (MLA backward, MoE frozen) ---\n");
+        B = 1;
+        size_t grad_bytes = 2 * dsv2_model_param_bytes(&cfg);
+        float *grad = (float *)malloc(grad_bytes);
+        for (int step = 0; step < train_1layer_steps; step++) {
+            dsv2_get_batch(ds.tokens, ds.n_tokens, idx, targets, 1, T, &seed);
+            float loss = dsv2_model_train_step_1layer(&model, idx, targets, 1, T, 0.01f, acts, logits, grad);
+            if (step % 10 == 0 || step == train_1layer_steps - 1) {
+                printf("1layer step %d loss %.4f\n", step, loss);
+            }
+        }
+        free(grad);
     }
 
     printf("\nNext: python scripts/export_v2_tiny.py && %s -sample -ckpt checkpoints/v2_tiny.bin\n", argv[0]);

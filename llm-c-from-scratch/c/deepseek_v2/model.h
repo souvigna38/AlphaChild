@@ -82,4 +82,20 @@ void dsv2_train_head_step(
 /* Load checkpoint written by scripts/export_v2_tiny.py */
 int dsv2_model_load_checkpoint(Dsv2Model *m, const char *path);
 
+/*
+ * Phase 5: one training step (n_layer must be 1).
+ * Updates MLA + RMSNorm + tied wte; MoE forward only (frozen in backward).
+ * grad_memory must hold 2 * dsv2_model_param_bytes.
+ */
+float dsv2_model_train_step_1layer(
+    Dsv2Model *m,
+    const int *idx,
+    const int *targets,
+    int B,
+    int T,
+    float lr,
+    float *activations,
+    float *logits,
+    float *grad_memory);
+
 #endif /* DEEPSEEK_V2_MODEL_H */
