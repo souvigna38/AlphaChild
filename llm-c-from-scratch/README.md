@@ -18,6 +18,16 @@ A **step-by-step Jupyter tutorial** that teaches the ideas behind [karpathy/llm.
 | 8 | `8.Train.ipynb` | Training loop (tiny Shakespeare) |
 | 9 | `9.Sample.ipynb` | Generate text |
 | 10 | `10.GPT2AndLlmc.ipynb` | GPT-2 124M config + map to llm.c |
+| 11 | `11.DeepSeekPath.ipynb` | Ladder: GPT-2 → DeepSeek-V2 → V4 |
+| 12 | `12.MLA.ipynb` | Multi-head Latent Attention |
+| 13 | `13.DeepSeekMoE.ipynb` | MoE feed-forward |
+| 14 | `14.DeepSeekV2Model.ipynb` | Full tiny DeepSeek-V2 |
+| 15 | `15.TrainDeepSeekV2.ipynb` | Train on tiny Shakespeare |
+| 16 | `16.SampleDeepSeekV2.ipynb` | Generate text |
+
+See **[docs/DEEPSEEK_VERSION_LADDER.md](docs/DEEPSEEK_VERSION_LADDER.md)** — we teach **V2** (not “V1”) after llm.c/GPT-2.
+
+**C port (piece by piece):** `c/deepseek_v2/mla.c` mirrors notebook 12; run `cd c && make test_mla`.
 
 ## Quick start
 
@@ -30,7 +40,7 @@ python3 -m pytest tests/ -v
 jupyter lab
 ```
 
-Open **`1.Tokens.ipynb`** and run cells in order through **`10`**.
+Open **`1.Tokens.ipynb`** and run cells in order through **`10`**, then **`11`–`16`** for DeepSeek-V2.
 
 ## Clone upstream llm.c (optional)
 
@@ -51,14 +61,16 @@ See **[AGENTS.md](AGENTS.md)** for full agent/human setup instructions.
 Keep the original tutorial on `main`; experiment on a **GitHub fork** and branch `feature/deepseek`.
 
 - **[FORK.md](FORK.md)** — how to fork (GitHub UI, CLI, local copy)  
-- **[docs/DEEPSEEK_ROADMAP.md](docs/DEEPSEEK_ROADMAP.md)** — planned notebooks 11–16 (MLA, MoE, …)  
+- **[docs/DEEPSEEK_VERSION_LADDER.md](docs/DEEPSEEK_VERSION_LADDER.md)** — why V2 after GPT-2 (active notebooks 11–16)  
+- **[docs/DEEPSEEK_ROADMAP.md](docs/DEEPSEEK_ROADMAP.md)** — optional DeepSeek-V4 notebook plan  
 - **[CURSOR_AGENT_FORK_DEEPSEEK.md](CURSOR_AGENT_FORK_DEEPSEEK.md)** — paste-ready task for another Cursor agent / OpenClaw
 
 ## Project layout
 
 ```
 llm-c-from-scratch/
-├── 1.Tokens.ipynb … 10.GPT2AndLlmc.ipynb
+├── 1.Tokens.ipynb … 16.SampleDeepSeekV2.ipynb
+├── c/deepseek_v2/        # commented C port (MLA first)
 ├── llmc/                 # importable package (used in tests + later notebooks)
 ├── data/tiny_shakespeare.txt
 ├── tests/

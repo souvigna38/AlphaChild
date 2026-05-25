@@ -1,12 +1,16 @@
-# DeepSeek-V4 in C (educational port)
+# C ports (educational)
 
-This directory is the **C track** for turning the [llm.c](https://github.com/karpathy/llm.c) style codebase into a **DeepSeek-V4** trainer — step by step, not in one jump.
+Two ladders, both piece-by-piece:
 
-## Build & run (phase 0)
+1. **DeepSeek-V2** (after notebooks 11–16): `deepseek_v2/mla.c` (+ MoE later) — **start here** after GPT-2/llm.c.
+2. **DeepSeek-V4** (advanced): `deepseek_v4_config.c`, `rmsnorm.c` — see V4 scope doc.
+
+## Build & run
 
 ```bash
 cd llm-c-from-scratch/c
-make test
+make test_mla    # DeepSeek-V2 MLA (notebook 12)
+make test        # DeepSeek-V4 phase-0 skeleton
 ```
 
 ## Prerequisites
@@ -28,4 +32,5 @@ cd llm-c-from-scratch
 | `deepseek_v4_config.c` | Tiny config + per-layer schedules |
 | `rmsnorm.c` | RMSNorm forward |
 | `train_deepseek_v4_tiny.c` | Skeleton main (smoke tests only) |
-| `mhc.c`, `moe.c`, `csa.c`, … | **TODO** per scope doc |
+| `deepseek_v2/mla.c` | MLA forward (matches notebook 12) |
+| `deepseek_v2/moe.c`, `mhc.c`, … | **TODO** next pieces |

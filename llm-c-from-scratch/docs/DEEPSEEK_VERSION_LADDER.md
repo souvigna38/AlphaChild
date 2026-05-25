@@ -1,0 +1,32 @@
+# Learning ladder: llm.c (GPT-2) → DeepSeek
+
+## Why not “DeepSeek V1”?
+
+There is **no widely used public “DeepSeek-V1 architecture”** in the same sense as V2/V3/V4:
+
+- Early **DeepSeek** releases were strong models, but the **named architectural jump** most tutorials reference is **DeepSeek-V2** (May 2024): **MLA** + **DeepSeekMoE**.
+- **V3** keeps MLA + MoE and adds training tweaks (aux-loss-free routing, MTP, etc.).
+- **V4** replaces much of the stack again (mHC, CSA/HCA, hash-MoE bootstrap).
+
+So for **piece-by-piece learning** after `llm.c`, we recommend:
+
+```
+Notebooks 1–10   GPT-2 / llm.c ideas (PyTorch)
+Notebooks 11–16  DeepSeek-V2 (MLA + MoE)  ← you are here
+(later)          DeepSeek-V4 (mHC + CSA/HCA) in c/ + notebooks
+```
+
+If you literally need the **first** DeepSeek checkpoint family, treat it as “pre-V2 dense LM” and skip to V2 for new mechanisms.
+
+## Map to llm.c C files
+
+| Notebook | Concept | llm.c analogue |
+|----------|---------|----------------|
+| 11 | Roadmap | `train_gpt2.c` overview |
+| 12 | MLA | `attention` + KV cache size |
+| 13 | DeepSeekMoE | (no MoE in GPT-2 — new) |
+| 14 | Full V2 block | transformer loop in `train_gpt2.c` |
+| 15 | Training | main training loop |
+| 16 | Sampling | generation at end of `train_gpt2.c` |
+
+Matching **commented C** ports live under `c/deepseek_v2/` (added piece by piece).
