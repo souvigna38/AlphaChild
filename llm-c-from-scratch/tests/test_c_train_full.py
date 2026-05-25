@@ -19,6 +19,8 @@ def test_train_full_smoke():
         text=True,
         check=True,
     )
-    losses = [float(x) for x in re.findall(r"full step \d+ loss ([0-9.+-eE]+)", out.stdout)]
+    losses = [float(x) for x in re.findall(r"train step \d+ loss ([0-9.+-eE]+)", out.stdout)]
+    if not losses:
+        losses = [float(x) for x in re.findall(r"full step \d+ loss ([0-9.+-eE]+)", out.stdout)]
     assert len(losses) >= 2
     assert all(l == l and abs(l) < 100.0 for l in losses), losses

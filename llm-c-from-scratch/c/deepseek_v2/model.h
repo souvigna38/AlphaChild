@@ -5,6 +5,7 @@
 #ifndef DEEPSEEK_V2_MODEL_H
 #define DEEPSEEK_V2_MODEL_H
 
+#include "adamw.h"
 #include "block.h"
 
 #include <stddef.h>
@@ -79,8 +80,15 @@ void dsv2_train_head_step(
     float *activations,
     float *logits);
 
-/* Load checkpoint written by scripts/export_v2_tiny.py */
+/* Load/save checkpoint (same layout as scripts/export_v2_tiny.py) */
 int dsv2_model_load_checkpoint(Dsv2Model *m, const char *path);
+int dsv2_model_save_checkpoint(const Dsv2Model *m, const char *path);
+
+typedef struct {
+    float lr;
+    float grad_clip;   /* 0 = no clip */
+    Dsv2AdamW *adam;   /* non-NULL → AdamW; else SGD on all params */
+} Dsv2TrainConfig;
 
 /*
  * Phase 5: one training step (n_layer must be 1).
@@ -98,14 +106,16 @@ float dsv2_model_train_step_1layer(
     float *logits,
     float *grad_memory);
 
-/* Phase 5b: all layers, MLA + MoE backward (B must be 1) */
-size_t dsv2_model_train_working_bytes(const Dsv2ModelConfig *cfg, int T);
+/* Phase 5b/6: all layers, MLA + MoE backward; B>=1 (gradients averaged over batch) */
+size_t dsv2_model_train_working_bytes(const Dsv2ModelConfig *cfg, int B, int T);
+float *dsv2_train_grad_ptr(char *work, const Dsv2ModelConfig *cfg, int B, int T);
 float dsv2_model_train_step_full(
     Dsv2Model *m,
     const int *idx,
     const int *targets,
+    int B,
     int T,
-    float lr,
+    const Dsv2TrainConfig *tc,
     float *activations,
     float *logits,
     float *grad_memory,

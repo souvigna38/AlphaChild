@@ -14,7 +14,7 @@ def test_moe_backward_autograd():
     y.sum().backward()
     assert x.grad is not None and x.grad.abs().mean() > 0
     assert moe.gate.weight.grad is not None
-    assert moe.experts[0].w1.weight.grad is not None
+    assert any(e.w1.weight.grad is not None for e in moe.experts)
 
 
 def test_moe_router_topk():

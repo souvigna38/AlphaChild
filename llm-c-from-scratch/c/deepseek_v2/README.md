@@ -12,6 +12,7 @@ This folder mirrors **notebooks 11–16** in commented C, the same way `vendor/l
 | 4 | `train_v2_tiny.c` | 15–16 train + sample |
 | 5 | `mla.c` backward | 17 — `-train-1layer` |
 | 5b | `moe_train.c`, `block_train.c` | 17 — `-train-full` |
+| 6 | `adamw.c`, save/load in `model.c` | 17 — `-train-adam -batch -save` |
 
 Build MLA smoke test from repo root:
 

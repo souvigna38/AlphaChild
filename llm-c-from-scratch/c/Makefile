@@ -12,7 +12,7 @@ SRCS_V4 = deepseek_v4_config.c rmsnorm.c train_deepseek_v4_tiny.c
 SRCS_MLA = deepseek_v2/ops.c deepseek_v2/mla.c deepseek_v2/test_mla.c
 SRCS_MOE = deepseek_v2/ops.c deepseek_v2/moe.c deepseek_v2/test_moe.c
 SRCS_BLOCK = rmsnorm.c deepseek_v2/ops.c deepseek_v2/block.c deepseek_v2/mla.c deepseek_v2/moe.c deepseek_v2/test_block.c
-SRCS_TRAIN = rmsnorm.c deepseek_v2/ops.c deepseek_v2/data.c deepseek_v2/model.c deepseek_v2/block.c deepseek_v2/block_train.c deepseek_v2/mla.c deepseek_v2/moe.c deepseek_v2/moe_train.c deepseek_v2/train_v2_tiny.c
+SRCS_TRAIN = rmsnorm.c deepseek_v2/ops.c deepseek_v2/data.c deepseek_v2/adamw.c deepseek_v2/model.c deepseek_v2/block.c deepseek_v2/block_train.c deepseek_v2/mla.c deepseek_v2/moe.c deepseek_v2/moe_train.c deepseek_v2/train_v2_tiny.c
 
 .PHONY: all clean test test_mla test_moe test_block test_v2 test_train_v2
 
@@ -55,6 +55,7 @@ test_train_v2: $(BIN_TRAIN)
 	./$(BIN_TRAIN) -train-head 20
 	./$(BIN_TRAIN) -train-1layer 15
 	./$(BIN_TRAIN) -train-full 10
+	./$(BIN_TRAIN) -train-adam 8 -batch 2
 
 # Phase 2–4: pieces + trainer
 test_v2: test_mla test_moe test_block test_train_v2

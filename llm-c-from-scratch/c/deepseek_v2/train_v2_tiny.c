@@ -1,5 +1,5 @@
 /*
- * train_v2_tiny.c — Phase 4–5b educational CPU trainer (DeepSeek-V2 tiny)
+ * train_v2_tiny.c — Phase 4–6 educational CPU trainer (DeepSeek-V2 tiny)
  *
  * Mirrors notebook 15 (train) and 16 (sample) + llm.c train_gpt2.c structure.
  *
@@ -7,12 +7,12 @@
  *   ./bin/train_v2_tiny              forward-only loss demo (random weights)
  *   ./bin/train_v2_tiny -train-head  SGD on tied embedding/lm_head only (demo)
  *   ./bin/train_v2_tiny -train-1layer N  Phase 5: MLA+RMSNorm+wte (1 layer, MoE frozen)
- *   ./bin/train_v2_tiny -train-full N    Phase 5b: all layers MLA+MoE backward (B=1)
+ *   ./bin/train_v2_tiny -train-full N    Phase 5b: SGD, all layers (B=1 default)
+ *   ./bin/train_v2_tiny -train-adam N [-batch B] [-save ckpt.bin]  Phase 6: AdamW + B>1
  *   ./bin/train_v2_tiny -sample -ckpt path.bin  greedy generation
- *
- * Full MoE backward in C is Phase 5b — use PyTorch Trainer for all experts.
  */
 
+#include "adamw.h"
 #include "data.h"
 #include "model.h"
 
@@ -25,7 +25,9 @@
 static void usage(const char *argv0) {
     fprintf(
         stderr,
-        "Usage: %s [-train-head STEPS] [-train-1layer STEPS] [-train-full STEPS] [-sample] [-ckpt file] [-data path]\n",
+        "Usage: %s [-train-head STEPS] [-train-1layer STEPS] [-train-full STEPS]\n"
+        "       [-train-adam STEPS] [-batch B] [-lr LR] [-save ckpt.bin]\n"
+        "       [-sample] [-ckpt file] [-data path]\n",
         argv0);
 }
 
@@ -35,7 +37,7 @@ static void sample_text(Dsv2Model *m, Dsv2Dataset *ds, int max_new, int T) {
     int *ctx = (int *)malloc((size_t)(T + max_new) * sizeof(int));
     for (int i = 0; i < plen; i++) {
         unsigned char c = (unsigned char)prompt[i];
-        if (c < 256 && ds->vocab.stoi[c] >= 0) {
+        if (ds->vocab.stoi[c] >= 0) {
             ctx[i] = ds->vocab.stoi[c];
         } else {
             ctx[i] = 0;
@@ -63,12 +65,64 @@ static void sample_text(Dsv2Model *m, Dsv2Dataset *ds, int max_new, int T) {
     free(logits);
 }
 
+static void run_full_train(
+    Dsv2Model *model,
+    Dsv2Dataset *ds,
+    Dsv2ModelConfig *cfg,
+    int B,
+    int T,
+    int steps,
+    float lr,
+    float grad_clip,
+    Dsv2AdamW *adam,
+    unsigned int *seed) {
+    int *idx = (int *)malloc((size_t)B * (size_t)T * sizeof(int));
+    int *targets = (int *)malloc((size_t)B * (size_t)T * sizeof(int));
+    size_t work_bytes = dsv2_model_train_working_bytes(cfg, B, T);
+    char *work = (char *)malloc(work_bytes);
+    float *grad = dsv2_train_grad_ptr(work, cfg, B, T);
+    Dsv2TrainConfig tc = {.lr = lr, .grad_clip = grad_clip, .adam = adam};
+
+    for (int step = 0; step < steps; step++) {
+        dsv2_get_batch(ds->tokens, ds->n_tokens, idx, targets, B, T, seed);
+        float loss = dsv2_model_train_step_full(model, idx, targets, B, T, &tc, (float *)work, NULL, grad, NULL);
+        if (step % 5 == 0 || step == steps - 1) {
+            printf("train step %d loss %.4f\n", step, loss);
+        }
+    }
+
+    free(work);
+    free(idx);
+    free(targets);
+}
+
+static Dsv2ModelConfig default_cfg(int vocab_size, int n_layer) {
+    Dsv2ModelConfig cfg = {
+        .vocab_size = vocab_size,
+        .block_size = 32,
+        .n_layer = n_layer,
+        .n_embd = 64,
+        .n_head = 4,
+        .kv_lora_rank = 16,
+        .n_routed_experts = 4,
+        .n_shared_experts = 1,
+        .num_experts_per_tok = 2,
+        .moe_intermediate = 96,
+        .rms_eps = 1e-6f,
+    };
+    return cfg;
+}
+
 int main(int argc, char **argv) {
     const char *data_path = "../data/tiny_shakespeare.txt";
     const char *ckpt = NULL;
+    const char *save_path = NULL;
     int train_head_steps = 0;
     int train_1layer_steps = 0;
     int train_full_steps = 0;
+    int train_adam_steps = 0;
+    int batch_size = 1;
+    float lr = 3e-3f;
     int do_sample = 0;
 
     for (int i = 1; i < argc; i++) {
@@ -78,6 +132,14 @@ int main(int argc, char **argv) {
             train_1layer_steps = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-train-full") == 0 && i + 1 < argc) {
             train_full_steps = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-train-adam") == 0 && i + 1 < argc) {
+            train_adam_steps = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-batch") == 0 && i + 1 < argc) {
+            batch_size = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-lr") == 0 && i + 1 < argc) {
+            lr = (float)atof(argv[++i]);
+        } else if (strcmp(argv[i], "-save") == 0 && i + 1 < argc) {
+            save_path = argv[++i];
         } else if (strcmp(argv[i], "-sample") == 0) {
             do_sample = 1;
         } else if (strcmp(argv[i], "-ckpt") == 0 && i + 1 < argc) {
@@ -90,7 +152,11 @@ int main(int argc, char **argv) {
         }
     }
 
-    printf("=== DeepSeek-V2 tiny C trainer (phase 4–5b) ===\n");
+    if (batch_size < 1) {
+        batch_size = 1;
+    }
+
+    printf("=== DeepSeek-V2 tiny C trainer (phase 4–6) ===\n");
     printf("Data: %s\n", data_path);
 
     Dsv2Dataset ds;
@@ -100,23 +166,13 @@ int main(int argc, char **argv) {
     }
     printf("vocab=%d tokens=%d\n", ds.vocab.vocab_size, ds.n_tokens);
 
-    Dsv2ModelConfig cfg = {
-        .vocab_size = ds.vocab.vocab_size,
-        .block_size = 32,
-        .n_layer = (train_1layer_steps > 0) ? 1 : 2,
-        .n_embd = 64,
-        .n_head = 4,
-        .kv_lora_rank = 16,
-        .n_routed_experts = 4,
-        .n_shared_experts = 1,
-        .num_experts_per_tok = 2,
-        .moe_intermediate = 96,
-        .rms_eps = 1e-6f,
-    };
+    int n_layer = (train_1layer_steps > 0) ? 1 : 2;
+    Dsv2ModelConfig cfg = default_cfg(ds.vocab.vocab_size, n_layer);
 
-    Dsv2Model model;
+    Dsv2Model model = {0};
     if (ckpt && dsv2_model_load_checkpoint(&model, ckpt) == 0) {
         printf("Loaded checkpoint %s\n", ckpt);
+        cfg = model.cfg;
     } else {
         if (ckpt) {
             printf("Checkpoint load failed, using random init\n");
@@ -150,7 +206,6 @@ int main(int argc, char **argv) {
 
     if (train_head_steps > 0) {
         printf("\n--- head-only SGD (tied wte/lm_head, blocks frozen) ---\n");
-        printf("Use PyTorch notebook 15 for full-model training.\n");
         for (int step = 0; step < train_head_steps; step++) {
             dsv2_get_batch(ds.tokens, ds.n_tokens, idx, targets, B, T, &seed);
             dsv2_train_head_step(&model, idx, targets, B, T, 0.05f, acts, logits);
@@ -178,39 +233,38 @@ int main(int argc, char **argv) {
     }
 
     if (train_full_steps > 0) {
-        printf("\n--- Phase 5b: full C train (MLA + MoE backward, B=1) ---\n");
+        printf("\n--- Phase 5b: full C train (SGD, MLA + MoE backward, B=1) ---\n");
         cfg.n_layer = 2;
         dsv2_model_free(&model);
         dsv2_model_init(&model, &cfg, 42u);
-        B = 1;
-        Dsv2BlockConfig bc = {
-            .attn = {.n_embd = cfg.n_embd, .n_head = cfg.n_head, .kv_lora_rank = cfg.kv_lora_rank, .block_size = cfg.block_size},
-            .moe = {.n_embd = cfg.n_embd,
-                    .n_routed_experts = cfg.n_routed_experts,
-                    .n_shared_experts = cfg.n_shared_experts,
-                    .num_experts_per_tok = cfg.num_experts_per_tok,
-                    .moe_intermediate = cfg.moe_intermediate},
-            .rms_eps = cfg.rms_eps};
-        size_t work_bytes = dsv2_model_train_working_bytes(&cfg, T);
-        float *work = (float *)malloc(work_bytes);
-        size_t float_bytes = (size_t)T * (size_t)cfg.n_embd * 2 * sizeof(float) + (size_t)T * (size_t)cfg.vocab_size * sizeof(float) +
-                             (size_t)cfg.n_layer * dsv2_block_train_scratch_bytes(&bc, T) + (size_t)T * (size_t)cfg.n_embd * 5 * sizeof(float);
-        float *tacts = work;
-        float *tlogits = work + (size_t)T * (size_t)cfg.n_embd * 2;
-        int *topi = (int *)((char *)work + float_bytes);
-        float *grad = (float *)((char *)work + float_bytes + (size_t)cfg.n_layer * (size_t)T * (size_t)cfg.num_experts_per_tok * sizeof(int));
-        for (int step = 0; step < train_full_steps; step++) {
-            dsv2_get_batch(ds.tokens, ds.n_tokens, idx, targets, 1, T, &seed);
-            float loss = dsv2_model_train_step_full(&model, idx, targets, T, 0.001f, tacts, tlogits, grad, topi);
-            if (step % 5 == 0 || step == train_full_steps - 1) {
-                printf("full step %d loss %.4f\n", step, loss);
-            }
-        }
-        free(work);
+        run_full_train(&model, &ds, &cfg, 1, T, train_full_steps, 0.001f, 1.0f, NULL, &seed);
+        printf("Phase 5b OK\n");
     }
 
-    printf("\nNext: python scripts/export_v2_tiny.py && %s -sample -ckpt checkpoints/v2_tiny.bin\n", argv[0]);
-    printf("Phase 5b OK\n");
+    if (train_adam_steps > 0) {
+        printf("\n--- Phase 6: AdamW full train (B=%d, lr=%g) ---\n", batch_size, lr);
+        cfg.n_layer = 2;
+        dsv2_model_free(&model);
+        dsv2_model_init(&model, &cfg, 42u);
+        Dsv2AdamW adam;
+        size_t np = dsv2_model_param_bytes(&cfg) / sizeof(float);
+        dsv2_adamw_init(&adam, np, lr, 0.01f);
+        run_full_train(&model, &ds, &cfg, batch_size, T, train_adam_steps, lr, 1.0f, &adam, &seed);
+        if (save_path) {
+            if (dsv2_model_save_checkpoint(&model, save_path) == 0) {
+                printf("Saved checkpoint %s\n", save_path);
+            } else {
+                fprintf(stderr, "Failed to save %s\n", save_path);
+            }
+        }
+        dsv2_adamw_free(&adam);
+        printf("Phase 6 OK — sample: %s -sample -ckpt %s\n", argv[0], save_path ? save_path : "(use -save)");
+    }
+
+    if (!train_adam_steps) {
+        printf("\nNext: %s -train-adam 40 -batch 4 -save ../checkpoints/v2_c.bin\n", argv[0]);
+        printf("Or: python scripts/export_v2_tiny.py && %s -sample -ckpt ../checkpoints/v2_tiny.bin\n", argv[0]);
+    }
 
     free(idx);
     free(targets);

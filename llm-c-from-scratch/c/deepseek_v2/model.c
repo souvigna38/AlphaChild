@@ -286,6 +286,9 @@ void dsv2_train_head_step(
 }
 
 int dsv2_model_load_checkpoint(Dsv2Model *m, const char *path) {
+    if (!m) {
+        return -1;
+    }
     FILE *f = fopen(path, "rb");
     if (!f) {
         return -1;
@@ -306,6 +309,29 @@ int dsv2_model_load_checkpoint(Dsv2Model *m, const char *path) {
     dsv2_model_init(m, &cfg, 42u);
     size_t n = dsv2_model_param_bytes(&cfg) / sizeof(float);
     if (fread(m->memory, sizeof(float), n, f) != n) {
+        fclose(f);
+        return -1;
+    }
+    fclose(f);
+    return 0;
+}
+
+int dsv2_model_save_checkpoint(const Dsv2Model *m, const char *path) {
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        return -1;
+    }
+    uint32_t magic = DSV2_CKPT_MAGIC;
+    if (fwrite(&magic, sizeof(magic), 1, f) != 1) {
+        fclose(f);
+        return -1;
+    }
+    if (fwrite(&m->cfg, sizeof(m->cfg), 1, f) != 1) {
+        fclose(f);
+        return -1;
+    }
+    size_t n = dsv2_model_param_bytes(&m->cfg) / sizeof(float);
+    if (fwrite(m->memory, sizeof(float), n, f) != n) {
         fclose(f);
         return -1;
     }
@@ -426,7 +452,7 @@ float dsv2_model_train_step_1layer(
     return loss;
 }
 
-size_t dsv2_model_train_working_bytes(const Dsv2ModelConfig *cfg, int T) {
+static size_t train_sample_working_bytes(const Dsv2ModelConfig *cfg, int T) {
     Dsv2BlockConfig bc = {
         .attn = {.n_embd = cfg->n_embd, .n_head = cfg->n_head, .kv_lora_rank = cfg->kv_lora_rank, .block_size = cfg->block_size},
         .moe = {.n_embd = cfg->n_embd,
@@ -438,9 +464,22 @@ size_t dsv2_model_train_working_bytes(const Dsv2ModelConfig *cfg, int T) {
     size_t bytes = (size_t)T * (size_t)cfg->n_embd * 2 * sizeof(float);
     bytes += (size_t)T * (size_t)cfg->vocab_size * sizeof(float);
     bytes += (size_t)cfg->n_layer * dsv2_block_train_scratch_bytes(&bc, T);
-    bytes += (size_t)T * (size_t)cfg->n_embd * 5 * sizeof(float); /* backward temps */
+    bytes += (size_t)T * (size_t)cfg->n_embd * 5 * sizeof(float);
     bytes += (size_t)cfg->n_layer * (size_t)T * (size_t)cfg->num_experts_per_tok * sizeof(int);
-    return bytes + 2 * dsv2_model_param_bytes(cfg);
+    return bytes;
+}
+
+size_t dsv2_model_train_working_bytes(const Dsv2ModelConfig *cfg, int B, int T) {
+    if (B < 1) {
+        B = 1;
+    }
+    return train_sample_working_bytes(cfg, T) * (size_t)B + 2 * dsv2_model_param_bytes(cfg);
+}
+
+/* grad_memory at end of buffer returned by dsv2_model_train_working_bytes */
+float *dsv2_train_grad_ptr(char *work, const Dsv2ModelConfig *cfg, int B, int T) {
+    size_t sample_bytes = train_sample_working_bytes(cfg, T);
+    return (float *)(work + (size_t)B * sample_bytes);
 }
 
 static void model_forward_train(
@@ -515,15 +554,53 @@ static void model_forward_train(
     }
 }
 
-float dsv2_model_train_step_full(
+static void apply_param_gradients(Dsv2Model *m, const float *dw, const Dsv2TrainConfig *tc) {
+    const int C = m->cfg.n_embd;
+    const int V = m->cfg.vocab_size;
+    const int L = m->cfg.n_layer;
+    const int r = m->cfg.kv_lora_rank;
+    const int E = m->cfg.n_routed_experts;
+    const int I = m->cfg.moe_intermediate;
+    const int S = m->cfg.n_shared_experts;
+    size_t np = dsv2_model_param_bytes(&m->cfg) / sizeof(float);
+
+    if (tc->adam) {
+        dsv2_adamw_step(tc->adam, m->memory, dw);
+        return;
+    }
+
+    float lr = tc->lr;
+    sgd_update(m->wte, dw, (size_t)V * (size_t)C, lr);
+    sgd_update(m->rms_f, dw + (m->rms_f - m->memory), (size_t)C, lr);
+    for (int l = 0; l < L; l++) {
+        sgd_update(m->rms1_w + (size_t)l * (size_t)C, dw + (m->rms1_w - m->memory) + (size_t)l * (size_t)C, (size_t)C, lr);
+        sgd_update(m->rms2_w + (size_t)l * (size_t)C, dw + (m->rms2_w - m->memory) + (size_t)l * (size_t)C, (size_t)C, lr);
+        sgd_update(m->wq + (size_t)l * (size_t)C * (size_t)C, dw + (m->wq - m->memory) + (size_t)l * (size_t)C * (size_t)C, (size_t)C * (size_t)C, lr);
+        sgd_update(m->w_dkv + (size_t)l * (size_t)r * (size_t)C, dw + (m->w_dkv - m->memory) + (size_t)l * (size_t)r * (size_t)C, (size_t)r * (size_t)C, lr);
+        sgd_update(m->w_uk + (size_t)l * (size_t)C * (size_t)r, dw + (m->w_uk - m->memory) + (size_t)l * (size_t)C * (size_t)r, (size_t)C * (size_t)r, lr);
+        sgd_update(m->w_uv + (size_t)l * (size_t)C * (size_t)r, dw + (m->w_uv - m->memory) + (size_t)l * (size_t)C * (size_t)r, (size_t)C * (size_t)r, lr);
+        sgd_update(m->wo + (size_t)l * (size_t)C * (size_t)C, dw + (m->wo - m->memory) + (size_t)l * (size_t)C * (size_t)C, (size_t)C * (size_t)C, lr);
+        sgd_update(m->gate + (size_t)l * (size_t)E * (size_t)C, dw + (m->gate - m->memory) + (size_t)l * (size_t)E * (size_t)C, (size_t)E * (size_t)C, lr);
+        sgd_update(m->expert_w1 + (size_t)l * (size_t)E * (size_t)I * (size_t)C, dw + (m->expert_w1 - m->memory) + (size_t)l * (size_t)E * (size_t)I * (size_t)C, (size_t)E * (size_t)I * (size_t)C, lr);
+        sgd_update(m->expert_w2 + (size_t)l * (size_t)E * (size_t)C * (size_t)I, dw + (m->expert_w2 - m->memory) + (size_t)l * (size_t)E * (size_t)C * (size_t)I, (size_t)E * (size_t)C * (size_t)I, lr);
+        sgd_update(m->expert_w3 + (size_t)l * (size_t)E * (size_t)I * (size_t)C, dw + (m->expert_w3 - m->memory) + (size_t)l * (size_t)E * (size_t)I * (size_t)C, (size_t)E * (size_t)I * (size_t)C, lr);
+        sgd_update(m->shared_w1 + (size_t)l * (size_t)S * (size_t)I * (size_t)C, dw + (m->shared_w1 - m->memory) + (size_t)l * (size_t)S * (size_t)I * (size_t)C, (size_t)S * (size_t)I * (size_t)C, lr);
+        sgd_update(m->shared_w2 + (size_t)l * (size_t)S * (size_t)C * (size_t)I, dw + (m->shared_w2 - m->memory) + (size_t)l * (size_t)S * (size_t)C * (size_t)I, (size_t)S * (size_t)C * (size_t)I, lr);
+        sgd_update(m->shared_w3 + (size_t)l * (size_t)S * (size_t)I * (size_t)C, dw + (m->shared_w3 - m->memory) + (size_t)l * (size_t)S * (size_t)I * (size_t)C, (size_t)S * (size_t)I * (size_t)C, lr);
+    }
+    (void)np;
+}
+
+static float train_backward_one_sample(
     Dsv2Model *m,
     const int *idx,
     const int *targets,
     int T,
-    float lr,
+    int B,
     float *activations,
     float *logits,
-    float *grad_memory,
+    float *dw,
+    float *drest,
     int *moe_topi) {
     const int C = m->cfg.n_embd;
     const int V = m->cfg.vocab_size;
@@ -534,12 +611,23 @@ float dsv2_model_train_step_full(
     const int I = m->cfg.moe_intermediate;
     const int S = m->cfg.n_shared_experts;
 
-    float *dw = grad_memory;
-    float *drest = grad_memory + dsv2_model_param_bytes(&m->cfg) / sizeof(float);
-    memset(dw, 0, dsv2_model_param_bytes(&m->cfg));
+    const size_t block_scr = dsv2_block_train_scratch_bytes(
+        &(Dsv2BlockConfig){
+            .attn = {.n_embd = C, .n_head = m->cfg.n_head, .kv_lora_rank = r, .block_size = m->cfg.block_size},
+            .moe = {.n_embd = C,
+                    .n_routed_experts = E,
+                    .n_shared_experts = S,
+                    .num_experts_per_tok = k,
+                    .moe_intermediate = I},
+            .rms_eps = m->cfg.rms_eps},
+        T);
+    size_t act_clear = (size_t)T * (size_t)C * 2 + (size_t)T * (size_t)V + (size_t)L * block_scr / sizeof(float) +
+                       (size_t)T * (size_t)C * 5;
+    memset(activations, 0, act_clear * sizeof(float));
 
     model_forward_train(logits, idx, m, T, activations, moe_topi);
     float loss = dsv2_cross_entropy_loss(logits, targets, 1, T, V, C);
+    float dscale = 1.0f / (float)(B * T);
 
     float *dlogits = drest;
     for (int t = 0; t < T; t++) {
@@ -558,7 +646,7 @@ float dsv2_model_train_step_full(
         float inv = 1.0f / sum;
         for (int v = 0; v < V; v++) {
             float p = expf(lg[v] - maxv) * inv;
-            dlogits[(size_t)t * (size_t)V + (size_t)v] = (p - (v == y ? 1.0f : 0.0f)) / (float)T;
+            dlogits[(size_t)t * (size_t)V + (size_t)v] = (p - (v == y ? 1.0f : 0.0f)) * dscale;
         }
     }
 
@@ -573,7 +661,6 @@ float dsv2_model_train_step_full(
 
     float *x = activations;
     float *hf = x + (size_t)T * (size_t)C;
-    const size_t block_scr = dsv2_block_train_scratch_bytes(&bc, T);
     float *dx = activations + (size_t)T * (size_t)C * 2 + (size_t)T * (size_t)V + (size_t)L * block_scr / sizeof(float);
     float *dlnf = dx + (size_t)T * (size_t)C;
     float *dx_pre_ln = dx + (size_t)T * (size_t)C * 2;
@@ -633,26 +720,67 @@ float dsv2_model_train_step_full(
         }
     }
 
-    clip_grad_norm(dw, dsv2_model_param_bytes(&m->cfg) / sizeof(float), 1.0f);
+    return loss;
+}
 
-    sgd_update(m->wte, dw, (size_t)V * (size_t)C, lr);
-    sgd_update(m->rms_f, dw + (m->rms_f - m->memory), (size_t)C, lr);
-    for (int l = 0; l < L; l++) {
-        sgd_update(m->rms1_w + (size_t)l * (size_t)C, dw + (m->rms1_w - m->memory) + (size_t)l * (size_t)C, (size_t)C, lr);
-        sgd_update(m->rms2_w + (size_t)l * (size_t)C, dw + (m->rms2_w - m->memory) + (size_t)l * (size_t)C, (size_t)C, lr);
-        sgd_update(m->wq + (size_t)l * (size_t)C * (size_t)C, dw + (m->wq - m->memory) + (size_t)l * (size_t)C * (size_t)C, (size_t)C * (size_t)C, lr);
-        sgd_update(m->w_dkv + (size_t)l * (size_t)r * (size_t)C, dw + (m->w_dkv - m->memory) + (size_t)l * (size_t)r * (size_t)C, (size_t)r * (size_t)C, lr);
-        sgd_update(m->w_uk + (size_t)l * (size_t)C * (size_t)r, dw + (m->w_uk - m->memory) + (size_t)l * (size_t)C * (size_t)r, (size_t)C * (size_t)r, lr);
-        sgd_update(m->w_uv + (size_t)l * (size_t)C * (size_t)r, dw + (m->w_uv - m->memory) + (size_t)l * (size_t)C * (size_t)r, (size_t)C * (size_t)r, lr);
-        sgd_update(m->wo + (size_t)l * (size_t)C * (size_t)C, dw + (m->wo - m->memory) + (size_t)l * (size_t)C * (size_t)C, (size_t)C * (size_t)C, lr);
-        sgd_update(m->gate + (size_t)l * (size_t)E * (size_t)C, dw + (m->gate - m->memory) + (size_t)l * (size_t)E * (size_t)C, (size_t)E * (size_t)C, lr);
-        sgd_update(m->expert_w1 + (size_t)l * (size_t)E * (size_t)I * (size_t)C, dw + (m->expert_w1 - m->memory) + (size_t)l * (size_t)E * (size_t)I * (size_t)C, (size_t)E * (size_t)I * (size_t)C, lr);
-        sgd_update(m->expert_w2 + (size_t)l * (size_t)E * (size_t)C * (size_t)I, dw + (m->expert_w2 - m->memory) + (size_t)l * (size_t)E * (size_t)C * (size_t)I, (size_t)E * (size_t)C * (size_t)I, lr);
-        sgd_update(m->expert_w3 + (size_t)l * (size_t)E * (size_t)I * (size_t)C, dw + (m->expert_w3 - m->memory) + (size_t)l * (size_t)E * (size_t)I * (size_t)C, (size_t)E * (size_t)I * (size_t)C, lr);
-        sgd_update(m->shared_w1 + (size_t)l * (size_t)S * (size_t)I * (size_t)C, dw + (m->shared_w1 - m->memory) + (size_t)l * (size_t)S * (size_t)I * (size_t)C, (size_t)S * (size_t)I * (size_t)C, lr);
-        sgd_update(m->shared_w2 + (size_t)l * (size_t)S * (size_t)C * (size_t)I, dw + (m->shared_w2 - m->memory) + (size_t)l * (size_t)S * (size_t)C * (size_t)I, (size_t)S * (size_t)C * (size_t)I, lr);
-        sgd_update(m->shared_w3 + (size_t)l * (size_t)S * (size_t)I * (size_t)C, dw + (m->shared_w3 - m->memory) + (size_t)l * (size_t)S * (size_t)I * (size_t)C, (size_t)S * (size_t)I * (size_t)C, lr);
+float dsv2_model_train_step_full(
+    Dsv2Model *m,
+    const int *idx,
+    const int *targets,
+    int B,
+    int T,
+    const Dsv2TrainConfig *tc,
+    float *activations,
+    float *logits,
+    float *grad_memory,
+    int *moe_topi) {
+    if (B < 1 || T < 1 || !tc) {
+        return 0.0f;
     }
 
-    return loss;
+    size_t pbytes = dsv2_model_param_bytes(&m->cfg);
+    float *dw = grad_memory;
+    float *drest = grad_memory + pbytes / sizeof(float);
+    memset(dw, 0, pbytes);
+
+    size_t sample_bytes = train_sample_working_bytes(&m->cfg, T);
+    Dsv2BlockConfig bc = {
+        .attn = {.n_embd = m->cfg.n_embd, .n_head = m->cfg.n_head, .kv_lora_rank = m->cfg.kv_lora_rank, .block_size = m->cfg.block_size},
+        .moe = {.n_embd = m->cfg.n_embd,
+                .n_routed_experts = m->cfg.n_routed_experts,
+                .n_shared_experts = m->cfg.n_shared_experts,
+                .num_experts_per_tok = m->cfg.num_experts_per_tok,
+                .moe_intermediate = m->cfg.moe_intermediate},
+        .rms_eps = m->cfg.rms_eps};
+    size_t float_bytes = (size_t)T * (size_t)m->cfg.n_embd * 2 * sizeof(float) + (size_t)T * (size_t)m->cfg.vocab_size * sizeof(float) +
+                         (size_t)m->cfg.n_layer * dsv2_block_train_scratch_bytes(&bc, T) + (size_t)T * (size_t)m->cfg.n_embd * 5 * sizeof(float);
+    float loss_sum = 0.0f;
+    for (int b = 0; b < B; b++) {
+        char *sample_base = (char *)activations + (size_t)b * sample_bytes;
+        float *s_acts = (float *)sample_base;
+        float *s_logits = (float *)(sample_base + (size_t)T * (size_t)m->cfg.n_embd * 2 * sizeof(float));
+        int *s_topi = (int *)(sample_base + float_bytes);
+        loss_sum += train_backward_one_sample(
+            m,
+            idx + (size_t)b * (size_t)T,
+            targets + (size_t)b * (size_t)T,
+            T,
+            B,
+            s_acts,
+            s_logits,
+            dw,
+            drest,
+            s_topi);
+        if (tc->grad_clip > 0.0f) {
+            clip_grad_norm(dw, pbytes / sizeof(float), tc->grad_clip);
+        }
+    }
+
+    size_t np = pbytes / sizeof(float);
+    if (tc->grad_clip > 0.0f) {
+        clip_grad_norm(dw, np, tc->grad_clip);
+    }
+
+    apply_param_gradients(m, dw, tc);
+    return loss_sum / (float)B;
 }
