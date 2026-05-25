@@ -14,7 +14,8 @@ So for **piece-by-piece learning** after `llm.c`, we recommend:
 Notebooks 1–10   GPT-2 / llm.c ideas (PyTorch)
 Notebooks 11–17  DeepSeek-V2 (MLA + MoE + C train/backward)
 Notebook 18       DeepSeek-V4 kickoff (hash-MoE, SwiGLU) — `c/swiglu.c`, `c/hash_moe.c`
-(later)          V4 sliding / CSA / HCA / mHC in c/
+V4 phases 3–6     sliding / CSA / HCA / mHC / v4_attention in c/ (`make test_v4`)
+(later)          full V4 model train + nano parity
 ```
 
 If you literally need the **first** DeepSeek checkpoint family, treat it as “pre-V2 dense LM” and skip to V2 for new mechanisms.
@@ -31,6 +32,7 @@ If you literally need the **first** DeepSeek checkpoint family, treat it as “p
 | 16 | Sampling | generation + export | `-sample -ckpt` ✓ |
 | 17 | V2 backward / full train | `block_train.c`, `-train-full` | ✓ |
 | 18 | V4 roadmap + hash-MoE | `swiglu.c`, `hash_moe.c` | `make test_v4` ✓ |
+| 18b | V4 attention + mHC | `sliding_attn.c`, compressors, `mhc.c`, `v4_attention.c` | `test_v4_attention` ✓ |
 
 Matching **commented C** ports live under `c/deepseek_v2/` (V2) and top-level `c/` (V4 phases 0–2).
 

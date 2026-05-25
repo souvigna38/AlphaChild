@@ -44,6 +44,7 @@ void ds4_config_init_tiny(DeepSeekV4Config *cfg) {
     cfg->o_groups = 2;
     cfg->o_lora_rank = 16;
     cfg->rms_norm_eps = 1e-6f;
+    cfg->hc_eps = 1e-6f;
     cfg->rope_theta = 10000.0f;
     cfg->compress_rope_theta = 160000.0f;
     cfg->partial_rotary_factor = 0.5f;
@@ -73,6 +74,14 @@ static const char *attn_name(Ds4AttentionType t) {
 
 static const char *mlp_name(Ds4MlpType t) {
     return (t == DS4_MLP_HASH_MOE) ? "hash_moe" : "moe";
+}
+
+int ds4_qk_rope_head_dim(const DeepSeekV4Config *cfg) {
+    return (int)((float)cfg->head_dim * cfg->partial_rotary_factor);
+}
+
+int ds4_attention_width(const DeepSeekV4Config *cfg) {
+    return cfg->num_attention_heads * cfg->head_dim;
 }
 
 void ds4_config_print(const DeepSeekV4Config *cfg) {

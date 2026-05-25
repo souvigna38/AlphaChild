@@ -38,6 +38,15 @@ def test_hash_moe_forward():
     assert y.shape == h.shape
 
 
+def test_c_v4_attention_smoke():
+    if not (C_DIR / "bin" / "test_v4_attention").exists():
+        subprocess.run(["make", "bin/test_v4_attention"], cwd=C_DIR, check=True)
+    out = subprocess.run(
+        [str(C_DIR / "bin" / "test_v4_attention")], cwd=C_DIR, capture_output=True, text=True, check=True
+    )
+    assert "OK" in out.stdout
+
+
 def test_c_hash_moe_smoke():
     if not (C_DIR / "bin" / "test_hash_moe").exists():
         subprocess.run(["make", "bin/test_hash_moe"], cwd=C_DIR, check=True)

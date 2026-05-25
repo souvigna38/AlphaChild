@@ -39,11 +39,11 @@ There is **no** official `deepseek-ai/DeepSeek-V4` training repo in C/CUDA (unli
 | 0 | `train_deepseek_v4_tiny.c` skeleton + Makefile | `llm.c/train_gpt2.c` |
 | 1 | `rmsnorm.c`, `swiglu.c` | V4 vs GPT-2 LayerNorm/GELU |
 | 2 | `hash_moe.c` | `mlp_layer_types: hash_moe` |
-| 3 | `moe.c` | routed MoE + sqrtsoftplus scores |
-| 4 | `sliding_attn.c` | local window attention |
-| 5 | `hca_compressor.c`, `csa_compressor.c`, `indexer.c` | §2.3.1–2.3.2 |
-| 6 | `mhc.c` | hyper-connections (Sinkhorn) |
-| 7 | Full `train_deepseek_v4_tiny.c` forward/backward | Match `nano_deepseek_v4` tiny config |
+| 3 | `sliding_attn.c` | local window + attention sink |
+| 4 | `hca_compressor.c`, `csa_compressor.c`, `indexer.c` | CSA/HCA + Lightning indexer |
+| 5 | `mhc.c` | hyper-connections (Sinkhorn) |
+| 6 | `v4_attention.c` | unified sliding / CSA / HCA forward |
+| 7 | `moe.c` (routed) + full `train_deepseek_v4_tiny.c` | Match `nano_deepseek_v4` tiny config |
 | 8 | CUDA kernels (`c/cuda/`) | `llm.c/train_gpt2.cu` pattern |
 
 Educational numbering mirrors notebooks → **`c/01_*.c` …** (optional rename as files land).

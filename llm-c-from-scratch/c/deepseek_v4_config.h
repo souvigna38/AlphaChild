@@ -43,6 +43,7 @@ typedef struct {
     int o_groups;
     int o_lora_rank;
     float rms_norm_eps;
+    float hc_eps;
     float rope_theta;
     float compress_rope_theta;
     float partial_rotary_factor;
@@ -56,5 +57,9 @@ typedef struct {
 void ds4_config_init_tiny(DeepSeekV4Config *cfg);
 void ds4_config_free(DeepSeekV4Config *cfg);
 void ds4_config_print(const DeepSeekV4Config *cfg);
+
+/* Derived dims (match nano_deepseek_v4.config properties). */
+int ds4_qk_rope_head_dim(const DeepSeekV4Config *cfg);
+int ds4_attention_width(const DeepSeekV4Config *cfg);
 
 #endif /* DEEPSEEK_V4_CONFIG_H */
