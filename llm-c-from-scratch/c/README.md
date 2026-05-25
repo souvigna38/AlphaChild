@@ -9,7 +9,10 @@ Two ladders, both piece-by-piece:
 
 ```bash
 cd llm-c-from-scratch/c
-make test_mla    # DeepSeek-V2 MLA (notebook 12)
+make test_v2     # DeepSeek-V2: MLA + MoE + block (notebooks 12–14)
+make test_mla    # piece 1 only
+make test_moe    # piece 2 only
+make test_block  # piece 3 only
 make test        # DeepSeek-V4 phase-0 skeleton
 ```
 
@@ -32,5 +35,8 @@ cd llm-c-from-scratch
 | `deepseek_v4_config.c` | Tiny config + per-layer schedules |
 | `rmsnorm.c` | RMSNorm forward |
 | `train_deepseek_v4_tiny.c` | Skeleton main (smoke tests only) |
-| `deepseek_v2/mla.c` | MLA forward (matches notebook 12) |
-| `deepseek_v2/moe.c`, `mhc.c`, … | **TODO** next pieces |
+| `deepseek_v2/mla.c` | MLA (notebook 12) |
+| `deepseek_v2/moe.c` | MoE (notebook 13) |
+| `deepseek_v2/block.c` | One block (notebook 14) |
+| `train_v2_tiny.c` | **TODO** full trainer (notebooks 15–16) |
+| `mhc.c`, … | V4 only |

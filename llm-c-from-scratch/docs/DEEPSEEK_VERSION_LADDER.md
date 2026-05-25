@@ -24,8 +24,8 @@ If you literally need the **first** DeepSeek checkpoint family, treat it as “p
 |----------|---------|----------------|
 | 11 | Roadmap | `train_gpt2.c` overview |
 | 12 | MLA | `attention` + KV cache size |
-| 13 | DeepSeekMoE | (no MoE in GPT-2 — new) |
-| 14 | Full V2 block | transformer loop in `train_gpt2.c` |
+| 13 | DeepSeekMoE | (no MoE in GPT-2 — new) | `moe.c` ✓ |
+| 14 | Full V2 block | transformer loop in `train_gpt2.c` | `block.c` ✓ |
 | 15 | Training | main training loop |
 | 16 | Sampling | generation at end of `train_gpt2.c` |
 
