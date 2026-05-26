@@ -45,7 +45,8 @@ There is **no** official `deepseek-ai/DeepSeek-V4` training repo in C/CUDA (unli
 | 6 | `v4_attention.c` | unified sliding / CSA / HCA forward |
 | 7 | `moe.c` (routed) + full forward (`v4_model.c`) | Match `nano_deepseek_v4` tiny config |
 | 8 | `v4_train.c` train-head SGD (`-train-head`) | V2 `train_v2_tiny -train-head` pattern |
-| 9 | Layer backward + AdamW; then CUDA (`c/cuda/`) | `block_train.c`, `llm.c/train_gpt2.cu` |
+| 9 | `hash_moe_train.c`, HyperHead backward, `-train-adam` | `block_train.c` / AdamW |
+| 10 | Full layer backward; CUDA (`c/cuda/`) | `llm.c/train_gpt2.cu` |
 
 Educational numbering mirrors notebooks → **`c/01_*.c` …** (optional rename as files land).
 

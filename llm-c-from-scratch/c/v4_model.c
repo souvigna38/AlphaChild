@@ -23,7 +23,8 @@ void ds4_model_forward(
     float *streams_a,
     float *streams_b,
     float *scratch,
-    float *norm_h_out) {
+    float *norm_h_out,
+    float *hidden_pre_norm_out) {
     const int C = cfg->hidden_size;
     const int V = cfg->vocab_size;
     const int hc = cfg->hc_mult;
@@ -74,6 +75,9 @@ void ds4_model_forward(
             weights->hc_head_fn,
             weights->hc_head_base,
             weights->hc_head_scale);
+        if (hidden_pre_norm_out != NULL) {
+            memcpy(hidden_pre_norm_out + (size_t)t * (size_t)C, hidden + (size_t)t * (size_t)C, (size_t)C * sizeof(float));
+        }
         ds4_rmsnorm_forward(norm_h + (size_t)t * (size_t)C, hidden + (size_t)t * (size_t)C, weights->final_norm, 1, C, eps);
         if (norm_h_out != NULL) {
             memcpy(norm_h_out + (size_t)t * (size_t)C, norm_h + (size_t)t * (size_t)C, (size_t)C * sizeof(float));

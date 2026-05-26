@@ -1,7 +1,10 @@
+#include "adamw.h"
 #include "deepseek_v4_config.h"
 #include "hash_moe.h"
 #include "v4_model.h"
+#include "v4_train.h"
 
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -75,42 +78,11 @@ static void fill_layer_min(Ds4LayerWeights *w, const DeepSeekV4Config *cfg, int 
     }
 }
 
-static void free_layer_min(Ds4LayerWeights *w) {
-    free(w->moe_gate);
-    free(w->moe_route_bias);
-    free(w->moe_expert_gu);
-    free(w->moe_expert_down);
-    free(w->moe_shared_gu);
-    free(w->moe_shared_down);
-    free(w->tid2eid);
-    free(w->attn_norm_w);
-    free(w->ffn_norm_w);
-    free(w->attn_hc_fn);
-    free(w->attn_hc_base);
-    free(w->ffn_hc_fn);
-    free(w->ffn_hc_base);
-    free(w->wq_a);
-    free(w->w_qa_norm);
-    free(w->wq_b);
-    free(w->wkv);
-    free(w->w_kv_norm);
-    free(w->attn_sink);
-    free(w->wo_a);
-    free(w->wo_b);
-    free(w->hca_w_kv);
-    free(w->hca_w_gate);
-    free(w->hca_pos_bias);
-    free(w->hca_norm);
-    free(w->csa_w_kv);
-    free(w->csa_w_gate);
-    free(w->csa_pos_bias);
-    free(w->csa_norm);
-    free(w->idx_wq_b);
-    free(w->idx_w_weights);
-    free(w->idx_w_kv);
-    free(w->idx_w_gate);
-    free(w->idx_pos_bias);
-    free(w->idx_norm);
+static void rand_small(float *p, size_t n, unsigned int *seed) {
+    for (size_t i = 0; i < n; i++) {
+        *seed = *seed * 1103515245u + 12345u;
+        p[i] = 0.002f * (float)((int)(*seed % 1000) - 500);
+    }
 }
 
 int main(void) {
@@ -121,6 +93,7 @@ int main(void) {
     const int V = cfg.vocab_size;
     const int hc = cfg.hc_mult;
     const int nL = cfg.num_hidden_layers;
+    unsigned int seed = 42u;
 
     Ds4ModelWeights mw = {0};
     mw.embed = (float *)calloc((size_t)V * (size_t)C, sizeof(float));
@@ -132,33 +105,52 @@ int main(void) {
     mw.hc_head_scale[0] = 1.0f;
     mw.layers = (Ds4LayerWeights *)calloc((size_t)nL, sizeof(Ds4LayerWeights));
     for (int i = 0; i < nL; i++) {
-        Ds4LayerWeights *w = &mw.layers[i];
-        const int hash = cfg.mlp_layer_types[i] == DS4_MLP_HASH_MOE;
-        fill_layer_min(w, &cfg, i, hash);
+        fill_layer_min(&mw.layers[i], &cfg, i, cfg.mlp_layer_types[i] == DS4_MLP_HASH_MOE);
+    }
+    rand_small(mw.embed, (size_t)V * (size_t)C, &seed);
+    rand_small(mw.lm_head, (size_t)V * (size_t)C, &seed);
+
+    int ids[8];
+    int targets[8];
+    for (int t = 0; t < T; t++) {
+        seed = seed * 1103515245u + 12345u;
+        ids[t] = (int)(seed % (unsigned int)V);
+        seed = seed * 1103515245u + 12345u;
+        targets[t] = (int)(seed % (unsigned int)V);
     }
 
-    int ids[8] = {1, 4, 7, 12, 3, 8, 15, 2};
+    size_t nparam = ds4_model_final_param_count(&cfg);
+    Ds4AdamW opt;
+    ds4_adamw_init(&opt, nparam, 0.05f, 0.01f);
+
     float *logits = (float *)calloc((size_t)T * (size_t)V, sizeof(float));
     float *sa = (float *)calloc((size_t)T * (size_t)hc * (size_t)C, sizeof(float));
     float *sb = (float *)calloc((size_t)T * (size_t)hc * (size_t)C, sizeof(float));
-    float *scratch = (float *)malloc(ds4_model_scratch_bytes(&cfg, T));
-    ds4_model_forward(logits, ids, T, &cfg, &mw, sa, sb, scratch, NULL, NULL);
-    printf("model forward logits[0..3] = %.6f %.6f %.6f %.6f\n", logits[0], logits[1], logits[2], logits[3]);
+    float *model_scratch = (float *)malloc(ds4_model_scratch_bytes(&cfg, T));
+    float *train_work = (float *)malloc(ds4_model_train_final_working_bytes(&cfg, T));
+    float *grad = (float *)calloc(nparam, sizeof(float));
+    float *tok = (float *)calloc((size_t)V, sizeof(float));
 
-    free(scratch);
+    float loss0 = ds4_model_train_final_adam_step(
+        &mw, &cfg, ids, targets, T, &opt, grad, sa, sb, model_scratch, train_work, logits, tok);
+    float loss1 = ds4_model_train_final_adam_step(
+        &mw, &cfg, ids, targets, T, &opt, grad, sa, sb, model_scratch, train_work, logits, tok);
+
+    printf("train-final loss step0=%.4f step1=%.4f\n", loss0, loss1);
+    if (!(loss1 <= loss0 + 0.05f)) {
+        fprintf(stderr, "expected loss stable or decreasing\n");
+        return 1;
+    }
+
+    ds4_adamw_free(&opt);
+    free(tok);
+    free(grad);
+    free(train_work);
+    free(model_scratch);
     free(sa);
     free(sb);
     free(logits);
-    for (int i = 0; i < nL; i++) {
-        free_layer_min(&mw.layers[i]);
-    }
-    free(mw.layers);
-    free(mw.embed);
-    free(mw.lm_head);
-    free(mw.final_norm);
-    free(mw.hc_head_fn);
-    free(mw.hc_head_base);
     ds4_config_free(&cfg);
-    printf("OK — full DeepSeek-V4 tiny forward (%d layers, T=%d)\n", nL, T);
+    printf("OK — train-final AdamW (embed+head+norm+hc_head)\n");
     return 0;
 }

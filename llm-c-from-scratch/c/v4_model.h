@@ -29,6 +29,7 @@ void ds4_model_forward(
     float *streams_a,
     float *streams_b,
     float *scratch,
-    float *norm_h_out);
+    float *norm_h_out,
+    float *hidden_pre_norm_out);
 
 #endif /* V4_MODEL_H */

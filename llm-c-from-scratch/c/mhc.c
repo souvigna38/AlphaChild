@@ -119,20 +119,17 @@ void ds4_hc_stream_update(
     }
 }
 
-void ds4_hyper_head_forward(
+static void hyper_head_core(
     float *out,
     const float *streams,
     const DeepSeekV4Config *cfg,
     const float *fn_weight,
     const float *fn_base,
-    const float *scale) {
+    const float *scale,
+    float *flat,
+    float *mixv) {
     const int hc = cfg->hc_mult;
     const int C = cfg->hidden_size;
-    float flat[512];
-    float mixv[16];
-    if ((size_t)hc * (size_t)C > 512 || hc > 16) {
-        return;
-    }
     for (int i = 0; i < hc; i++) {
         memcpy(flat + (size_t)i * (size_t)C, streams + (size_t)i * (size_t)C, (size_t)C * sizeof(float));
     }
@@ -151,4 +148,113 @@ void ds4_hyper_head_forward(
             out[c] += mixv[i] * streams[(size_t)i * (size_t)C + (size_t)c];
         }
     }
+}
+
+void ds4_hyper_head_forward(
+    float *out,
+    const float *streams,
+    const DeepSeekV4Config *cfg,
+    const float *fn_weight,
+    const float *fn_base,
+    const float *scale) {
+    const int hc = cfg->hc_mult;
+    const int C = cfg->hidden_size;
+    float flat[512];
+    float mixv[16];
+    if ((size_t)hc * (size_t)C > 512 || hc > 16) {
+        return;
+    }
+    hyper_head_core(out, streams, cfg, fn_weight, fn_base, scale, flat, mixv);
+}
+
+void ds4_hyper_head_forward_save(
+    float *out,
+    const float *streams,
+    const DeepSeekV4Config *cfg,
+    const float *fn_weight,
+    const float *fn_base,
+    const float *scale,
+    float *save_flat,
+    float *save_mixv) {
+    hyper_head_core(out, streams, cfg, fn_weight, fn_base, scale, save_flat, save_mixv);
+}
+
+static void unweighted_rmsnorm_backward(
+    float *dx,
+    const float *dy,
+    const float *x,
+    int n,
+    float eps) {
+    float sum_sq = 0.0f;
+    for (int i = 0; i < n; i++) {
+        sum_sq += x[i] * x[i];
+    }
+    float mean_sq = sum_sq / (float)n + eps;
+    float inv_rms = 1.0f / sqrtf(mean_sq);
+    float dot = 0.0f;
+    for (int i = 0; i < n; i++) {
+        dot += dy[i] * x[i];
+    }
+    for (int i = 0; i < n; i++) {
+        dx[i] += inv_rms * dy[i] - inv_rms * inv_rms * inv_rms * x[i] * dot / (float)n;
+    }
+}
+
+void ds4_hyper_head_backward(
+    float *dstreams,
+    float *d_fn_weight,
+    float *d_fn_base,
+    float *d_scale,
+    const float *dout,
+    const float *streams,
+    const float *flat,
+    const float *mixv,
+    const DeepSeekV4Config *cfg,
+    const float *fn_weight,
+    const float *fn_base,
+    const float *scale) {
+    const int hc = cfg->hc_mult;
+    const int C = cfg->hidden_size;
+    const float eps = cfg->hc_eps;
+    float d_mixv[16];
+    float d_flat[512];
+    if (hc > 16 || (size_t)hc * (size_t)C > 512) {
+        return;
+    }
+    for (int i = 0; i < hc; i++) {
+        d_mixv[i] = 0.0f;
+    }
+    for (int c = 0; c < C; c++) {
+        for (int i = 0; i < hc; i++) {
+            d_mixv[i] += dout[c] * streams[(size_t)i * (size_t)C + (size_t)c];
+            dstreams[(size_t)i * (size_t)C + (size_t)c] += dout[c] * mixv[i];
+        }
+    }
+    memset(d_flat, 0, (size_t)hc * (size_t)C * sizeof(float));
+    for (int i = 0; i < hc; i++) {
+        float sig = mixv[i] - eps;
+        float d_z = d_mixv[i] * sig * (1.0f - sig);
+        float s = fn_base[i];
+        const float *row = fn_weight + (size_t)i * (size_t)(hc * C);
+        for (int j = 0; j < hc * C; j++) {
+            s += row[j] * flat[j];
+        }
+        d_fn_base[i] += d_z;
+        float d_s = d_z * scale[0];
+        d_fn_base[i] += d_s;
+        d_scale[0] += d_z * s;
+        for (int j = 0; j < hc * C; j++) {
+            d_fn_weight[(size_t)i * (size_t)(hc * C) + (size_t)j] += d_s * flat[j];
+            d_flat[j] += d_s * row[j];
+        }
+    }
+    float d_stacked[512];
+    memset(d_stacked, 0, (size_t)hc * (size_t)C * sizeof(float));
+    unweighted_rmsnorm_backward(d_stacked, d_flat, flat, hc * C, cfg->rms_norm_eps);
+    for (int i = 0; i < hc; i++) {
+        for (int c = 0; c < C; c++) {
+            dstreams[(size_t)i * (size_t)C + (size_t)c] += d_stacked[(size_t)i * (size_t)C + (size_t)c];
+        }
+    }
+    (void)fn_base;
 }

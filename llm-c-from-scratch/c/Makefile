@@ -12,18 +12,21 @@ BIN_V4_ATTN = bin/test_v4_attention
 BIN_V4_MOE = bin/test_v4_moe
 BIN_V4_MODEL = bin/test_v4_model
 BIN_V4_TRAIN_HEAD = bin/test_v4_train_head
+BIN_V4_TRAIN_FINAL = bin/test_v4_train_final
+BIN_HASH_MOE_TRAIN = bin/test_hash_moe_train
 BIN_MLA = bin/test_mla
 BIN_MOE = bin/test_moe
 BIN_BLOCK = bin/test_block
 BIN_TRAIN = bin/train_v2_tiny
-V4_CORE = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c swiglu.c hash_moe.c moe.c sliding_attn.c hca_compressor.c csa_compressor.c indexer.c mhc.c v4_attention.c v4_layer.c v4_model.c v4_train.c
+V4_CORE = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c swiglu.c hash_moe.c hash_moe_train.c moe.c sliding_attn.c hca_compressor.c csa_compressor.c indexer.c mhc.c v4_attention.c v4_layer.c v4_model.c v4_train.c adamw.c
 SRCS_V4 = $(V4_CORE) deepseek_v2/data.c train_deepseek_v4_tiny.c
 SRCS_V4_TRAIN_HEAD = $(V4_CORE) test_v4_train_head.c
+SRCS_V4_TRAIN_FINAL = $(V4_CORE) test_v4_train_final.c
 SRCS_V4_MOE = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c moe.c test_moe.c
 SRCS_V4_MOE_BIN = $(SRCS_V4_MOE)
 SRCS_V4_MODEL = $(V4_CORE) test_v4_model.c
-SRCS_SWIGLU = swiglu.c test_swiglu.c
-SRCS_HASH_MOE = deepseek_v4_config.c swiglu.c hash_moe.c test_hash_moe.c
+SRCS_SWIGLU = v4_ops.c swiglu.c test_swiglu.c
+SRCS_HASH_MOE = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c test_hash_moe.c
 SRCS_SLIDING = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c sliding_attn.c test_sliding_attn.c
 SRCS_MHC = deepseek_v4_config.c v4_ops.c mhc.c test_mhc.c
 SRCS_V4_ATTN = $(V4_CORE) test_v4_attention.c
@@ -47,7 +50,9 @@ $(BIN_MLA): $(SRCS_MLA)
 test: $(BIN_V4)
 	./$(BIN_V4)
 
-test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD)
+SRCS_HASH_MOE_TRAIN = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c hash_moe_train.c test_hash_moe_train.c
+
+test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD) $(BIN_V4_TRAIN_FINAL)
 	./$(BIN_V4)
 	./$(BIN_SWIGLU)
 	./$(BIN_HASH_MOE)
@@ -57,10 +62,20 @@ test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_SLIDING) $(BIN_MHC) $(BIN
 	./$(BIN_V4_MOE)
 	./$(BIN_V4_MODEL)
 	./$(BIN_V4_TRAIN_HEAD)
+	./$(BIN_V4_TRAIN_FINAL)
+	./$(BIN_HASH_MOE_TRAIN)
+
+$(BIN_HASH_MOE_TRAIN): $(SRCS_HASH_MOE_TRAIN)
+	mkdir -p bin
+	$(CC) $(CFLAGS) -o $@ $(SRCS_HASH_MOE_TRAIN) $(LDFLAGS)
 
 $(BIN_V4_TRAIN_HEAD): $(SRCS_V4_TRAIN_HEAD)
 	mkdir -p bin
 	$(CC) $(CFLAGS) -o $@ $(SRCS_V4_TRAIN_HEAD) $(LDFLAGS)
+
+$(BIN_V4_TRAIN_FINAL): $(SRCS_V4_TRAIN_FINAL)
+	mkdir -p bin
+	$(CC) $(CFLAGS) -o $@ $(SRCS_V4_TRAIN_FINAL) $(LDFLAGS)
 
 $(BIN_V4_MOE): $(SRCS_V4_MOE_BIN)
 	mkdir -p bin

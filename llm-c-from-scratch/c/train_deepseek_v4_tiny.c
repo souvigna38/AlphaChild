@@ -3,6 +3,7 @@
  *
  * Phase 0–7: piece smokes + full forward (make test_v4)
  * Phase 8: -train-head N — SGD on lm_head (frozen trunk), optional Shakespeare data
+ * Phase 9: -train-adam N — AdamW on embed+lm_head+final_norm+hc_head (layers frozen)
  */
 
 #include "deepseek_v4_config.h"
@@ -13,6 +14,7 @@
 #include "swiglu.h"
 #include "v4_attention.h"
 #include "v4_model.h"
+#include "adamw.h"
 #include "v4_train.h"
 
 #include <math.h>
@@ -261,18 +263,110 @@ static int run_train_head(int steps, float lr, const char *data_path) {
     return 0;
 }
 
+static int run_train_adam(int steps, float lr, const char *data_path) {
+    DeepSeekV4Config cfg;
+    ds4_config_init_tiny(&cfg);
+    const int T = 8;
+    const int C = cfg.hidden_size;
+    const int V = cfg.vocab_size;
+    const int hc = cfg.hc_mult;
+    const int nL = cfg.num_hidden_layers;
+    unsigned int seed = 42u;
+
+    Dsv2Dataset ds = {0};
+    int use_data = 0;
+    if (data_path && dsv2_load_text_dataset(&ds, data_path) == 0 && ds.n_tokens > T + 2) {
+        use_data = 1;
+        printf("  dataset: %s (%d tokens)\n", data_path, ds.n_tokens);
+    } else {
+        printf("  dataset: synthetic random ids\n");
+    }
+
+    Ds4ModelWeights mw = {0};
+    mw.embed = (float *)calloc((size_t)V * (size_t)C, sizeof(float));
+    mw.lm_head = (float *)calloc((size_t)V * (size_t)C, sizeof(float));
+    mw.final_norm = (float *)calloc((size_t)C, sizeof(float));
+    mw.final_norm[0] = 1.0f;
+    mw.hc_head_fn = (float *)calloc((size_t)hc * (size_t)hc * (size_t)C, sizeof(float));
+    mw.hc_head_base = (float *)calloc((size_t)hc, sizeof(float));
+    mw.hc_head_scale[0] = 1.0f;
+    mw.layers = (Ds4LayerWeights *)calloc((size_t)nL, sizeof(Ds4LayerWeights));
+    for (int i = 0; i < nL; i++) {
+        fill_layer_min(&mw.layers[i], &cfg, i, cfg.mlp_layer_types[i] == DS4_MLP_HASH_MOE);
+    }
+    rand_small(mw.embed, (size_t)V * (size_t)C, &seed);
+    rand_small(mw.lm_head, (size_t)V * (size_t)C, &seed);
+
+    size_t nparam = ds4_model_final_param_count(&cfg);
+    Ds4AdamW opt;
+    ds4_adamw_init(&opt, nparam, lr, 0.01f);
+
+    int *ids = (int *)malloc((size_t)T * sizeof(int));
+    int *targets = (int *)malloc((size_t)T * sizeof(int));
+    float *logits = (float *)calloc((size_t)T * (size_t)V, sizeof(float));
+    float *sa = (float *)calloc((size_t)T * (size_t)hc * (size_t)C, sizeof(float));
+    float *sb = (float *)calloc((size_t)T * (size_t)hc * (size_t)C, sizeof(float));
+    float *model_scratch = (float *)malloc(ds4_model_scratch_bytes(&cfg, T));
+    float *train_work = (float *)malloc(ds4_model_train_final_working_bytes(&cfg, T));
+    float *grad = (float *)calloc(nparam, sizeof(float));
+    float *tok = (float *)calloc((size_t)V, sizeof(float));
+
+    printf("\n--- Phase 9: train-final AdamW (embed+lm_head+norm+hc_head, layers frozen) ---\n");
+    for (int s = 0; s < steps; s++) {
+        if (use_data) {
+            dsv2_get_batch(ds.tokens, ds.n_tokens, ids, targets, 1, T, &seed);
+            for (int t = 0; t < T; t++) {
+                ids[t] %= V;
+                targets[t] %= V;
+            }
+        } else {
+            for (int t = 0; t < T; t++) {
+                seed = seed * 1103515245u + 12345u;
+                ids[t] = (int)(seed % (unsigned int)V);
+                seed = seed * 1103515245u + 12345u;
+                targets[t] = (int)(seed % (unsigned int)V);
+            }
+        }
+        float loss = ds4_model_train_final_adam_step(
+            &mw, &cfg, ids, targets, T, &opt, grad, sa, sb, model_scratch, train_work, logits, tok);
+        if (s == 0 || (s + 1) % 10 == 0 || s == steps - 1) {
+            printf("  step %4d  loss %.4f\n", s + 1, loss);
+        }
+    }
+
+    ds4_adamw_free(&opt);
+    free(tok);
+    free(grad);
+    free(train_work);
+    free(model_scratch);
+    free(sa);
+    free(sb);
+    free(logits);
+    free(targets);
+    free(ids);
+    if (use_data) {
+        dsv2_dataset_free(&ds);
+    }
+    ds4_config_free(&cfg);
+    printf("Phase 9 train-final OK\n");
+    return 0;
+}
+
 static void usage(const char *prog) {
-    fprintf(stderr, "Usage: %s [smoke] | -train-head STEPS [-lr LR] [-data path.txt]\n", prog);
+    fprintf(stderr, "Usage: %s [smoke] | -train-head STEPS | -train-adam STEPS [-lr LR] [-data path.txt]\n", prog);
 }
 
 int main(int argc, char **argv) {
     int train_head_steps = 0;
+    int train_adam_steps = 0;
     float lr = 0.05f;
     const char *data_path = "../data/tiny_shakespeare.txt";
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-train-head") == 0 && i + 1 < argc) {
             train_head_steps = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-train-adam") == 0 && i + 1 < argc) {
+            train_adam_steps = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-lr") == 0 && i + 1 < argc) {
             lr = (float)atof(argv[++i]);
         } else if (strcmp(argv[i], "-data") == 0 && i + 1 < argc) {
@@ -286,8 +380,11 @@ int main(int argc, char **argv) {
     if (train_head_steps > 0) {
         return run_train_head(train_head_steps, lr, data_path);
     }
+    if (train_adam_steps > 0) {
+        return run_train_adam(train_adam_steps, lr, data_path);
+    }
 
-    printf("=== DeepSeek-V4 C port (phases 0–8) ===\n");
+    printf("=== DeepSeek-V4 C port (phases 0–9) ===\n");
     printf("Reference: vendor/nano-deepseek-v4/nano_deepseek_v4/modeling.py\n");
     printf("Notebook:  ../18.DeepSeekV4Path.ipynb\n\n");
 
@@ -312,9 +409,10 @@ int main(int argc, char **argv) {
     printf("  attention scratch (T=8) = %zu bytes\n", ds4_attention_scratch_bytes(&cfg, 8));
     printf("  model scratch (T=8) = %zu bytes\n", ds4_model_scratch_bytes(&cfg, 8));
     printf("  train-head: ./bin/train_deepseek_v4_tiny -train-head 20\n");
+    printf("  train-adam: ./bin/train_deepseek_v4_tiny -train-adam 20\n");
     printf("  full model: make bin/test_v4_model && ./bin/test_v4_model\n");
 
     ds4_config_free(&cfg);
-    printf("\nPhase 0–8 OK (forward + train-head entry point)\n");
+    printf("\nPhase 0–9 OK (forward + train-head + train-final AdamW)\n");
     return 0;
 }
