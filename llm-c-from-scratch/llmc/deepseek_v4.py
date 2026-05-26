@@ -136,6 +136,41 @@ class HashMoE(nn.Module):
         return out.view(b, t, h)
 
 
+class RoutedMoE(nn.Module):
+    """Routed experts: sqrt(softplus(gate)) + top-k + e_score_correction_bias."""
+
+    def __init__(self, cfg: DeepSeekV4Config) -> None:
+        super().__init__()
+        self.cfg = cfg
+        self.gate = nn.Linear(cfg.hidden_size, cfg.n_routed_experts, bias=False)
+        self.route_bias = nn.Parameter(torch.zeros(cfg.n_routed_experts))
+        self.experts = nn.ModuleList([SwiGLUExpert(cfg) for _ in range(cfg.n_routed_experts)])
+        self.shared = nn.ModuleList([SwiGLUExpert(cfg) for _ in range(cfg.n_shared_experts)])
+
+    def forward(self, hidden_states: torch.Tensor, input_ids: torch.Tensor | None = None) -> torch.Tensor:
+        del input_ids
+        b, t, h = hidden_states.shape
+        flat_h = hidden_states.reshape(-1, h)
+        logits = self.gate(flat_h)
+        affinity = torch.sqrt(F.softplus(logits))
+        scores = affinity + self.route_bias
+        topk_w, topk_idx = torch.topk(scores, self.cfg.num_experts_per_tok, dim=-1)
+        topk_w = affinity.gather(-1, topk_idx)
+        topk_w = topk_w / topk_w.sum(dim=-1, keepdim=True).clamp_min(1e-6)
+        topk_w = topk_w * self.cfg.routed_scaling_factor
+        out = flat_h.new_zeros(flat_h.shape)
+        for e, expert in enumerate(self.experts):
+            mask = topk_idx == e
+            tok_mask = mask.any(dim=-1)
+            if not tok_mask.any():
+                continue
+            w = (topk_w[tok_mask] * mask[tok_mask].to(topk_w.dtype)).sum(dim=-1, keepdim=True)
+            out[tok_mask] += expert(flat_h[tok_mask]) * w
+        for shared in self.shared:
+            out = out + shared(flat_h)
+        return out.view(b, t, h)
+
+
 def load_nano_model(cfg: DeepSeekV4Config | None = None):
     """Optional: return nano_deepseek_v4.DeepSeekV4Model for parity checks."""
     from nano_deepseek_v4.config import DeepSeekV4Config as NanoCfg

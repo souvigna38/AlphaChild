@@ -49,6 +49,7 @@ void ds4_config_init_tiny(DeepSeekV4Config *cfg) {
     cfg->compress_rope_theta = 160000.0f;
     cfg->partial_rotary_factor = 0.5f;
     cfg->routed_scaling_factor = 1.5f;
+    cfg->swiglu_limit = 10.0f;
     ds4_fill_default_schedules(cfg);
 }
 

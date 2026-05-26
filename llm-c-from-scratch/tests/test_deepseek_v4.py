@@ -5,7 +5,13 @@ from pathlib import Path
 
 import torch
 
-from llmc.deepseek_v4 import DeepSeekV4Config, HashMoE, SwiGLUExpert, build_hash_routing_table
+from llmc.deepseek_v4 import (
+    DeepSeekV4Config,
+    HashMoE,
+    RoutedMoE,
+    SwiGLUExpert,
+    build_hash_routing_table,
+)
 
 ROOT = Path(__file__).resolve().parent.parent
 C_DIR = ROOT / "c"
@@ -36,6 +42,23 @@ def test_hash_moe_forward():
     h = torch.randn(b, t, cfg.hidden_size)
     y = moe(h, ids)
     assert y.shape == h.shape
+
+
+def test_routed_moe_forward():
+    cfg = DeepSeekV4Config(hidden_size=32, moe_intermediate_size=48, n_routed_experts=4, num_experts_per_tok=2)
+    moe = RoutedMoE(cfg)
+    h = torch.randn(2, 5, cfg.hidden_size)
+    y = moe(h)
+    assert y.shape == h.shape
+
+
+def test_c_v4_model_smoke():
+    if not (C_DIR / "bin" / "test_v4_model").exists():
+        subprocess.run(["make", "bin/test_v4_model"], cwd=C_DIR, check=True)
+    out = subprocess.run(
+        [str(C_DIR / "bin" / "test_v4_model")], cwd=C_DIR, capture_output=True, text=True, check=True
+    )
+    assert "OK" in out.stdout
 
 
 def test_c_v4_attention_smoke():

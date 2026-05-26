@@ -48,6 +48,7 @@ typedef struct {
     float compress_rope_theta;
     float partial_rotary_factor;
     float routed_scaling_factor;
+    float swiglu_limit;
     /* per-layer schedules (length = num_hidden_layers) */
     Ds4AttentionType *layer_types;
     Ds4MlpType *mlp_layer_types;

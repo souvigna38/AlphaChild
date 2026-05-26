@@ -8,6 +8,7 @@
  * Phase 4: csa_compressor.c + hca_compressor.c + indexer.c
  * Phase 5: mhc.c
  * Phase 6: v4_attention.c (unified forward)
+ * Phase 7: moe.c + v4_layer.c + v4_model.c (full tiny forward)
  */
 
 #include "deepseek_v4_config.h"
@@ -17,6 +18,7 @@
 #include "sliding_attn.h"
 #include "swiglu.h"
 #include "v4_attention.h"
+#include "v4_model.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -107,7 +109,7 @@ int main(int argc, char **argv) {
     (void)argc;
     (void)argv;
 
-    printf("=== DeepSeek-V4 C port (phases 0–6 pieces) ===\n");
+    printf("=== DeepSeek-V4 C port (phases 0–7) ===\n");
     printf("Reference: vendor/nano-deepseek-v4/nano_deepseek_v4/modeling.py\n");
     printf("Notebook:  ../18.DeepSeekV4Path.ipynb\n\n");
 
@@ -130,9 +132,10 @@ int main(int argc, char **argv) {
     }
 
     printf("  attention scratch (T=8) = %zu bytes\n", ds4_attention_scratch_bytes(&cfg, 8));
-    printf("  mHC + sliding + CSA/HCA modules linked (make test_v4)\n");
+    printf("  model scratch (T=8) = %zu bytes\n", ds4_model_scratch_bytes(&cfg, 8));
+    printf("  full model: make bin/test_v4_model && ./bin/test_v4_model\n");
 
     ds4_config_free(&cfg);
-    printf("\nPhase 0–6 OK (piece tests; full model train next)\n");
+    printf("\nPhase 0–7 OK (piece tests + full forward smoke)\n");
     return 0;
 }

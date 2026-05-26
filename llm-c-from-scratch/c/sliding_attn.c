@@ -13,6 +13,7 @@
 #include <string.h>
 
 #define DS4_MAX_T 128
+#define DS4_MAX_COMP 64
 
 static void unweighted_rmsnorm(float *out, const float *x, int n, float eps) {
     float sum_sq = 0.0f;
@@ -56,8 +57,8 @@ void ds4_core_attention(
     const float *attn_sink,
     const int *mask) {
     const float scale = 1.0f / sqrtf((float)head_dim);
-    float scores[DS4_MAX_T + 1];
-    float probs[DS4_MAX_T + 1];
+    float scores[DS4_MAX_T + DS4_MAX_COMP + 1];
+    float probs[DS4_MAX_T + DS4_MAX_COMP + 1];
 
     for (int h = 0; h < NH; h++) {
         for (int tq = 0; tq < Tq; tq++) {
