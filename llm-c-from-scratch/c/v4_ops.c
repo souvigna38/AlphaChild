@@ -3,6 +3,23 @@
 #include <math.h>
 #include <stddef.h>
 
+void ds4_linear_backward(
+    float *dx,
+    float *dW,
+    const float *dy,
+    const float *x,
+    int out_dim,
+    int in_dim) {
+    for (int o = 0; o < out_dim; o++) {
+        float g = dy[o];
+        float *row = dW + (size_t)o * (size_t)in_dim;
+        for (int i = 0; i < in_dim; i++) {
+            dx[i] += row[i] * g;
+            row[i] += g * x[i];
+        }
+    }
+}
+
 void ds4_linear(const float *W, const float *x, float *y, int out_dim, int in_dim) {
     for (int o = 0; o < out_dim; o++) {
         float s = 0.0f;
@@ -56,6 +73,33 @@ void ds4_topk_select(const float *scores, int n, int k, int *out_idx, float *out
         out_w[t] = scores[best];
         used[best] = 1;
     }
+}
+
+float ds4_softmax_cross_entropy_backward(float *dlogits, const float *logits, int target, int vocab) {
+    float maxv = logits[0];
+    for (int v = 1; v < vocab; v++) {
+        if (logits[v] > maxv) {
+            maxv = logits[v];
+        }
+    }
+    float sum = 0.0f;
+    for (int v = 0; v < vocab; v++) {
+        dlogits[v] = expf(logits[v] - maxv);
+        sum += dlogits[v];
+    }
+    float inv = (sum > 0.0f) ? (1.0f / sum) : 0.0f;
+    float loss = 0.0f;
+    for (int v = 0; v < vocab; v++) {
+        float p = dlogits[v] * inv;
+        dlogits[v] = p;
+        if (v == target) {
+            loss = -logf(p > 1e-30f ? p : 1e-30f);
+        }
+    }
+    for (int v = 0; v < vocab; v++) {
+        dlogits[v] = (dlogits[v] - (v == target ? 1.0f : 0.0f));
+    }
+    return loss;
 }
 
 void ds4_softmax(float *out, const float *in, int n) {

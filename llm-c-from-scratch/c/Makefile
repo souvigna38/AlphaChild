@@ -11,12 +11,14 @@ BIN_MHC = bin/test_mhc
 BIN_V4_ATTN = bin/test_v4_attention
 BIN_V4_MOE = bin/test_v4_moe
 BIN_V4_MODEL = bin/test_v4_model
+BIN_V4_TRAIN_HEAD = bin/test_v4_train_head
 BIN_MLA = bin/test_mla
 BIN_MOE = bin/test_moe
 BIN_BLOCK = bin/test_block
 BIN_TRAIN = bin/train_v2_tiny
-V4_CORE = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c swiglu.c hash_moe.c moe.c sliding_attn.c hca_compressor.c csa_compressor.c indexer.c mhc.c v4_attention.c v4_layer.c v4_model.c
-SRCS_V4 = $(V4_CORE) train_deepseek_v4_tiny.c
+V4_CORE = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c swiglu.c hash_moe.c moe.c sliding_attn.c hca_compressor.c csa_compressor.c indexer.c mhc.c v4_attention.c v4_layer.c v4_model.c v4_train.c
+SRCS_V4 = $(V4_CORE) deepseek_v2/data.c train_deepseek_v4_tiny.c
+SRCS_V4_TRAIN_HEAD = $(V4_CORE) test_v4_train_head.c
 SRCS_V4_MOE = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c moe.c test_moe.c
 SRCS_V4_MOE_BIN = $(SRCS_V4_MOE)
 SRCS_V4_MODEL = $(V4_CORE) test_v4_model.c
@@ -36,7 +38,7 @@ all: $(BIN_V4) $(BIN_MLA) $(BIN_MOE) $(BIN_BLOCK) $(BIN_TRAIN)
 
 $(BIN_V4): $(SRCS_V4)
 	mkdir -p bin
-	$(CC) $(CFLAGS) -o $@ $(SRCS_V4) $(LDFLAGS)
+	$(CC) $(CFLAGS) -Ideepseek_v2 -o $@ $(SRCS_V4) $(LDFLAGS)
 
 $(BIN_MLA): $(SRCS_MLA)
 	mkdir -p bin
@@ -45,7 +47,7 @@ $(BIN_MLA): $(SRCS_MLA)
 test: $(BIN_V4)
 	./$(BIN_V4)
 
-test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL)
+test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD)
 	./$(BIN_V4)
 	./$(BIN_SWIGLU)
 	./$(BIN_HASH_MOE)
@@ -54,6 +56,11 @@ test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_SLIDING) $(BIN_MHC) $(BIN
 	./$(BIN_V4_ATTN)
 	./$(BIN_V4_MOE)
 	./$(BIN_V4_MODEL)
+	./$(BIN_V4_TRAIN_HEAD)
+
+$(BIN_V4_TRAIN_HEAD): $(SRCS_V4_TRAIN_HEAD)
+	mkdir -p bin
+	$(CC) $(CFLAGS) -o $@ $(SRCS_V4_TRAIN_HEAD) $(LDFLAGS)
 
 $(BIN_V4_MOE): $(SRCS_V4_MOE_BIN)
 	mkdir -p bin

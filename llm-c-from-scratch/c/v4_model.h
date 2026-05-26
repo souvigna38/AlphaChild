@@ -28,6 +28,7 @@ void ds4_model_forward(
     Ds4ModelWeights *weights,
     float *streams_a,
     float *streams_b,
-    float *scratch);
+    float *scratch,
+    float *norm_h_out);
 
 #endif /* V4_MODEL_H */

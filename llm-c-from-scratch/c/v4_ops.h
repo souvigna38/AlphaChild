@@ -4,7 +4,16 @@
 /* Small BLAS-free helpers shared by DeepSeek-V4 C modules. */
 
 void ds4_linear(const float *W, const float *x, float *y, int out_dim, int in_dim);
+void ds4_linear_backward(
+    float *dx,
+    float *dW,
+    const float *dy,
+    const float *x,
+    int out_dim,
+    int in_dim);
 void ds4_softmax(float *out, const float *in, int n);
+/* Stable softmax CE: writes dlogits, returns mean loss over n positions. */
+float ds4_softmax_cross_entropy_backward(float *dlogits, const float *logits, int target, int vocab);
 float ds4_dot(const float *a, const float *b, int n);
 float ds4_sqrt_softplus(float x);
 
