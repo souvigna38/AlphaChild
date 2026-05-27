@@ -8,14 +8,18 @@ void ds4_linear_backward(
     float *dW,
     const float *dy,
     const float *x,
+    const float *W,
     int out_dim,
     int in_dim) {
     for (int o = 0; o < out_dim; o++) {
         float g = dy[o];
-        float *row = dW + (size_t)o * (size_t)in_dim;
+        const float *row_w = W + (size_t)o * (size_t)in_dim;
+        float *row_g = dW != NULL ? dW + (size_t)o * (size_t)in_dim : NULL;
         for (int i = 0; i < in_dim; i++) {
-            dx[i] += row[i] * g;
-            row[i] += g * x[i];
+            dx[i] += row_w[i] * g;
+            if (row_g != NULL) {
+                row_g[i] += g * x[i];
+            }
         }
     }
 }
@@ -100,6 +104,16 @@ float ds4_softmax_cross_entropy_backward(float *dlogits, const float *logits, in
         dlogits[v] = (dlogits[v] - (v == target ? 1.0f : 0.0f));
     }
     return loss;
+}
+
+void ds4_softmax_backward(float *dscores, const float *probs, const float *dprobs, int n) {
+    float dot = 0.0f;
+    for (int i = 0; i < n; i++) {
+        dot += probs[i] * dprobs[i];
+    }
+    for (int i = 0; i < n; i++) {
+        dscores[i] = probs[i] * (dprobs[i] - dot);
+    }
 }
 
 void ds4_softmax(float *out, const float *in, int n) {

@@ -115,7 +115,7 @@ void ds4_swiglu_backward(
     (void)down_w;
     (void)swiglu_limit;
     memset(dh, 0, (size_t)intermediate * sizeof(float));
-    ds4_linear_backward(dx, d_down_w, dout, h_act, hidden, intermediate);
+    ds4_linear_backward(dx, d_down_w, dout, h_act, down_w, hidden, intermediate);
     for (int i = 0; i < intermediate; i++) {
         float g = gate_up_act[i];
         float u = gate_up_act[intermediate + i];
@@ -128,12 +128,13 @@ void ds4_swiglu_backward(
     }
     float dx_gu[256];
     memset(dx_gu, 0, (size_t)hidden * sizeof(float));
-    ds4_linear_backward(dx_gu, d_gate_up_w, dg_raw, x, intermediate, hidden);
+    ds4_linear_backward(dx_gu, d_gate_up_w, dg_raw, x, gate_up_w, intermediate, hidden);
     ds4_linear_backward(
         dx,
         d_gate_up_w + (size_t)intermediate * (size_t)hidden,
         du_raw,
         x,
+        gate_up_w + (size_t)intermediate * (size_t)hidden,
         intermediate,
         hidden);
     for (int i = 0; i < hidden; i++) {

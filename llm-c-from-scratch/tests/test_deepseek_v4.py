@@ -70,6 +70,15 @@ def test_c_v4_train_final_smoke():
     assert "OK" in out.stdout
 
 
+def test_c_v4_train_1layer_smoke():
+    if not (C_DIR / "bin" / "test_v4_train_1layer").exists():
+        subprocess.run(["make", "bin/test_v4_train_1layer"], cwd=C_DIR, check=True)
+    out = subprocess.run(
+        [str(C_DIR / "bin" / "test_v4_train_1layer")], cwd=C_DIR, capture_output=True, text=True, check=True
+    )
+    assert "OK" in out.stdout
+
+
 def test_c_hash_moe_train_smoke():
     if not (C_DIR / "bin" / "test_hash_moe_train").exists():
         subprocess.run(["make", "bin/test_hash_moe_train"], cwd=C_DIR, check=True)

@@ -9,9 +9,11 @@ void ds4_linear_backward(
     float *dW,
     const float *dy,
     const float *x,
+    const float *W,
     int out_dim,
     int in_dim);
 void ds4_softmax(float *out, const float *in, int n);
+void ds4_softmax_backward(float *dscores, const float *probs, const float *dprobs, int n);
 /* Stable softmax CE: writes dlogits, returns mean loss over n positions. */
 float ds4_softmax_cross_entropy_backward(float *dlogits, const float *logits, int target, int vocab);
 float ds4_dot(const float *a, const float *b, int n);

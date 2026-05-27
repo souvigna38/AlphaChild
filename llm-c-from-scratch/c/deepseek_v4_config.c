@@ -53,6 +53,15 @@ void ds4_config_init_tiny(DeepSeekV4Config *cfg) {
     ds4_fill_default_schedules(cfg);
 }
 
+void ds4_config_init_1layer(DeepSeekV4Config *cfg) {
+    ds4_config_init_tiny(cfg);
+    free(cfg->layer_types);
+    free(cfg->mlp_layer_types);
+    cfg->num_hidden_layers = 1;
+    cfg->num_hash_layers = 1;
+    ds4_fill_default_schedules(cfg);
+}
+
 void ds4_config_free(DeepSeekV4Config *cfg) {
     free(cfg->layer_types);
     free(cfg->mlp_layer_types);

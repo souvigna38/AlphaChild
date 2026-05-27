@@ -1,6 +1,7 @@
 #include "rmsnorm.h"
 
 #include <math.h>
+#include <stddef.h>
 
 void ds4_rmsnorm_forward(float *out, float *inp, const float *weight, int n, int C, float eps) {
     for (int i = 0; i < n; i++) {
@@ -43,7 +44,9 @@ void ds4_rmsnorm_backward(
             dot += dy[c] * weight[c] * x[c];
         }
         for (int c = 0; c < C; c++) {
-            dweight[c] += dy[c] * x[c] * inv_rms;
+            if (dweight != NULL) {
+                dweight[c] += dy[c] * x[c] * inv_rms;
+            }
             dx[c] += inv_rms * dy[c] * weight[c] - inv_rms * inv_rms * inv_rms * x[c] * dot / (float)C;
         }
     }

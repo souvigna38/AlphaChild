@@ -56,6 +56,8 @@ typedef struct {
 
 /* Build default tiny schedule (same logic as nano_deepseek_v4/config.py). */
 void ds4_config_init_tiny(DeepSeekV4Config *cfg);
+/* One sliding-attention + hash_moe layer (Phase 10 -train-1layer). */
+void ds4_config_init_1layer(DeepSeekV4Config *cfg);
 void ds4_config_free(DeepSeekV4Config *cfg);
 void ds4_config_print(const DeepSeekV4Config *cfg);
 

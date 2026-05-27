@@ -16,4 +16,19 @@ void ds4_apply_partial_rope_vec_t(float *hd, int head_dim, int rope_dim, const f
 /* Output projection path uses -sin (nano forward). */
 void ds4_apply_partial_rope_vec_t_neg_sin(float *hd, int head_dim, int rope_dim, const float *cos_row, const float *sin_row);
 
+/* Backward through ds4_apply_partial_rope_vec_t (orthogonal rotation). */
+void ds4_apply_partial_rope_backward_vec_t(
+    float *dhd,
+    int head_dim,
+    int rope_dim,
+    const float *cos_row,
+    const float *sin_row);
+
+void ds4_apply_partial_rope_backward_vec_t_neg_sin(
+    float *dhd,
+    int head_dim,
+    int rope_dim,
+    const float *cos_row,
+    const float *sin_row);
+
 #endif /* ROPE_H */

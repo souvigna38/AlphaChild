@@ -42,6 +42,61 @@ void ds4_apply_partial_rope_vec_t(float *hd, int head_dim, int rope_dim, const f
     ds4_apply_partial_rope_vec(hd, head_dim, rope_dim, cos_row, sin_row);
 }
 
+void ds4_apply_partial_rope_backward_vec_t(float *dhd, int head_dim, int rope_dim, const float *cos_row, const float *sin_row) {
+    if (rope_dim <= 0) {
+        return;
+    }
+    int nope = head_dim - rope_dim;
+    int half = rope_dim / 2;
+    float deven[32];
+    float dodd[32];
+    if (rope_dim > 64) {
+        return;
+    }
+    for (int i = 0; i < half; i++) {
+        float c = cos_row[i];
+        float s = sin_row[i];
+        float o0 = dhd[nope + 2 * i];
+        float o1 = dhd[nope + 2 * i + 1];
+        deven[i] = c * o0 + s * o1;
+        dodd[i] = -s * o0 + c * o1;
+    }
+    for (int i = 0; i < half; i++) {
+        dhd[nope + 2 * i] = deven[i];
+        dhd[nope + 2 * i + 1] = dodd[i];
+    }
+}
+
+void ds4_apply_partial_rope_backward_vec_t_neg_sin(
+    float *dhd,
+    int head_dim,
+    int rope_dim,
+    const float *cos_row,
+    const float *sin_row) {
+    if (rope_dim <= 0) {
+        return;
+    }
+    int nope = head_dim - rope_dim;
+    int half = rope_dim / 2;
+    float deven[32];
+    float dodd[32];
+    if (rope_dim > 64) {
+        return;
+    }
+    for (int i = 0; i < half; i++) {
+        float c = cos_row[i];
+        float s = -sin_row[i];
+        float o0 = dhd[nope + 2 * i];
+        float o1 = dhd[nope + 2 * i + 1];
+        deven[i] = c * o0 + s * o1;
+        dodd[i] = -s * o0 + c * o1;
+    }
+    for (int i = 0; i < half; i++) {
+        dhd[nope + 2 * i] = deven[i];
+        dhd[nope + 2 * i + 1] = dodd[i];
+    }
+}
+
 void ds4_apply_partial_rope_vec_t_neg_sin(float *hd, int head_dim, int rope_dim, const float *cos_row, const float *sin_row) {
     if (rope_dim <= 0) {
         return;
