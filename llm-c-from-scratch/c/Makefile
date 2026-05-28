@@ -19,6 +19,16 @@ BIN_V4_TRAIN_4LAYER = bin/test_v4_train_4layer
 BIN_V4_TRAIN_E2E = bin/test_v4_train_e2e
 BIN_V4_PARITY = bin/test_v4_parity
 BIN_INDEXER_TRAIN = bin/test_indexer_train
+BIN_CUDA_RMSNORM = bin/test_cuda_rmsnorm
+NVCC ?= nvcc
+HAVE_NVCC := $(shell command -v $(NVCC) >/dev/null 2>&1 && echo 1)
+ifeq ($(HAVE_NVCC),1)
+  CUDA_OBJ = cuda/ds4_rmsnorm.o
+  DS4_CUDA_CFLAGS = -DDS4_HAVE_CUDA
+  DS4_CUDA_LDFLAGS = -L/usr/local/cuda/lib64 -L/usr/lib/x86_64-linux-gnu -lcudart
+else
+  CUDA_OBJ =
+endif
 BIN_HASH_MOE_TRAIN = bin/test_hash_moe_train
 BIN_MLA = bin/test_mla
 BIN_MOE = bin/test_moe
@@ -47,7 +57,7 @@ SRCS_MOE = deepseek_v2/ops.c deepseek_v2/moe.c deepseek_v2/test_moe.c
 SRCS_BLOCK = rmsnorm.c deepseek_v2/ops.c deepseek_v2/block.c deepseek_v2/mla.c deepseek_v2/moe.c deepseek_v2/test_block.c
 SRCS_TRAIN = rmsnorm.c deepseek_v2/ops.c deepseek_v2/data.c deepseek_v2/adamw.c deepseek_v2/model.c deepseek_v2/block.c deepseek_v2/block_train.c deepseek_v2/mla.c deepseek_v2/moe.c deepseek_v2/moe_train.c deepseek_v2/train_v2_tiny.c
 
-.PHONY: all clean test test_v4 test_mla test_moe test_block test_v2 test_train_v2
+.PHONY: all clean test test_v4 test_mla test_moe test_block test_v2 test_train_v2 cuda-stub
 
 all: $(BIN_V4) $(BIN_MLA) $(BIN_MOE) $(BIN_BLOCK) $(BIN_TRAIN)
 
@@ -64,7 +74,7 @@ test: $(BIN_V4)
 
 SRCS_HASH_MOE_TRAIN = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c hash_moe_train.c test_hash_moe_train.c
 
-test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD) $(BIN_V4_TRAIN_FINAL) $(BIN_V4_TRAIN_1LAYER) $(BIN_V4_TRAIN_FULL) $(BIN_V4_TRAIN_4LAYER) $(BIN_V4_TRAIN_E2E) $(BIN_V4_PARITY) $(BIN_INDEXER_TRAIN)
+test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD) $(BIN_V4_TRAIN_FINAL) $(BIN_V4_TRAIN_1LAYER) $(BIN_V4_TRAIN_FULL) $(BIN_V4_TRAIN_4LAYER) $(BIN_V4_TRAIN_E2E) $(BIN_V4_PARITY) $(BIN_CUDA_RMSNORM) $(BIN_INDEXER_TRAIN)
 	./$(BIN_V4)
 	./$(BIN_SWIGLU)
 	./$(BIN_HASH_MOE)
@@ -80,6 +90,7 @@ test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLI
 	./$(BIN_V4_TRAIN_4LAYER)
 	./$(BIN_V4_TRAIN_E2E)
 	./$(BIN_V4_PARITY)
+	./$(BIN_CUDA_RMSNORM)
 	./$(BIN_INDEXER_TRAIN)
 	./$(BIN_HASH_MOE_TRAIN)
 
@@ -119,14 +130,17 @@ $(BIN_INDEXER_TRAIN): $(SRCS_INDEXER_TRAIN)
 	mkdir -p bin
 	$(CC) $(CFLAGS) -o $@ $(SRCS_INDEXER_TRAIN) $(LDFLAGS)
 
-cuda-stub:
-	@if command -v nvcc >/dev/null 2>&1; then \
-		mkdir -p bin; \
-		nvcc -O2 -std=c++14 -o bin/v4_cuda_stub cuda/v4_kernels_stub.cu; \
-		./bin/v4_cuda_stub; \
-	else \
-		echo "nvcc not found; CPU reference in make test_v4 (-train-4layer)"; \
-	fi
+ifeq ($(HAVE_NVCC),1)
+cuda/ds4_rmsnorm.o: cuda/ds4_rmsnorm.cu
+	$(NVCC) -O2 -std=c++14 -c -o $@ $<
+endif
+
+$(BIN_CUDA_RMSNORM): ds4_cuda.c rmsnorm.c v4_ops.c test_cuda_rmsnorm.c $(CUDA_OBJ)
+	mkdir -p bin
+	$(CC) $(CFLAGS) $(DS4_CUDA_CFLAGS) -o $@ ds4_cuda.c rmsnorm.c v4_ops.c test_cuda_rmsnorm.c $(CUDA_OBJ) $(LDFLAGS) $(DS4_CUDA_LDFLAGS)
+
+cuda-stub: $(BIN_CUDA_RMSNORM)
+	./$(BIN_CUDA_RMSNORM)
 
 $(BIN_V4_MOE): $(SRCS_V4_MOE_BIN)
 	mkdir -p bin

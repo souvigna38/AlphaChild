@@ -52,6 +52,7 @@ There is **no** official `deepseek-ai/DeepSeek-V4` training repo in C/CUDA (unli
 | 13 | `indexer_train.c`, indexer backward + AdamW on CSA layer | Lightning indexer in nano |
 | 14 | `ds4_model_train_step_e2e`, `-train-e2e` | Unfreeze lm_head + final_norm + hc_head on 4-layer block |
 | 15 | `v4_parity.c`, `test_v4_parity`, `verify_v4_parity.py` | Deterministic forward golden + config vs nano |
+| 16 | `cuda/ds4_rmsnorm.cu`, `ds4_cuda.c`, `test_cuda_rmsnorm` | First CUDA kernel (RMSNorm forward) + CPU fallback |
 
 Educational numbering mirrors notebooks → **`c/01_*.c` …** (optional rename as files land).
 
