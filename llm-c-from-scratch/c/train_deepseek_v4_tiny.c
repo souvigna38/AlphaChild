@@ -700,7 +700,7 @@ int main(int argc, char **argv) {
         return run_train_4layer(train_4layer_steps, lr, data_path);
     }
 
-    printf("=== DeepSeek-V4 C port (phases 0–12) ===\n");
+    printf("=== DeepSeek-V4 C port (phases 0–13) ===\n");
     printf("Reference: vendor/nano-deepseek-v4/nano_deepseek_v4/modeling.py\n");
     printf("Notebook:  ../18.DeepSeekV4Path.ipynb\n\n");
 

@@ -2,7 +2,7 @@
 
 #include "csa_compressor_train.h"
 #include "hca_compressor_train.h"
-#include "indexer.h"
+#include "indexer_train.h"
 #include "rmsnorm.h"
 #include "rope.h"
 #include "v4_ops.h"
@@ -601,7 +601,7 @@ void ds4_hca_attention_backward(
 }
 
 static size_t csa_attn_cache_base(const DeepSeekV4Config *cfg, int T) {
-    return ds4_csa_compress_train_cache_floats(cfg, T);
+    return ds4_csa_compress_train_cache_floats(cfg, T) + ds4_csa_indexer_train_cache_floats(cfg, T);
 }
 
 static size_t csa_attn_cache_tail(const DeepSeekV4Config *cfg, int T) {
@@ -765,7 +765,9 @@ void ds4_csa_attention_forward_train(
         comp_kv, comp_end, hidden, T, cfg, csa_w_kv, csa_w_gate, csa_pos_bias, csa_norm, csa_cache, &n_comp);
     *n_comp_i = n_comp;
 
-    ds4_csa_indexer_forward(
+    float *idx_cache = cache + ds4_csa_compress_train_cache_floats(cfg, T);
+    int n_idx = 0;
+    ds4_csa_indexer_forward_train(
         sparse_mask,
         hidden,
         q_mid,
@@ -779,7 +781,10 @@ void ds4_csa_attention_forward_train(
         idx_w_kv,
         idx_w_gate,
         idx_pos_bias,
-        idx_norm);
+        idx_norm,
+        idx_cache,
+        &n_idx);
+    (void)n_idx;
 
     ds4_rope_cos_sin_buffer(cos_buf, sin_buf, T, rope_dim, cfg->rope_theta);
 
@@ -864,6 +869,12 @@ void ds4_csa_attention_backward(
     float *d_csa_w_gate,
     float *d_csa_pos_bias,
     float *d_csa_norm,
+    float *d_idx_wq_b,
+    float *d_idx_w_weights,
+    float *d_idx_w_kv,
+    float *d_idx_w_gate,
+    float *d_idx_pos_bias,
+    float *d_idx_norm,
     const float *dout,
     const float *hidden,
     int T,
@@ -880,6 +891,12 @@ void ds4_csa_attention_backward(
     const float *csa_w_gate,
     const float *csa_pos_bias,
     const float *csa_norm,
+    const float *idx_wq_b,
+    const float *idx_w_weights,
+    const float *idx_w_kv,
+    const float *idx_w_gate,
+    const float *idx_pos_bias,
+    const float *idx_norm,
     float *scratch,
     float *cache) {
     const int C = cfg->hidden_size;
@@ -903,6 +920,8 @@ void ds4_csa_attention_backward(
     csa_tail_offsets(cfg, T, csa_attn_cache_base(cfg, T), &c_nc, &c_ckv, &c_cend, &c_sparse, &c_probs, &c_q, &c_qp, &c_qm, &c_kv, &c_keys, &c_cos, &c_xin, &c_omid, &c_ctx);
 
     float *csa_cache = cache;
+    size_t compress_sz = ds4_csa_compress_train_cache_floats(cfg, T);
+    float *idx_cache = cache + compress_sz;
     float *tail = cache + csa_attn_cache_base(cfg, T);
     int n_comp = *(int *)(tail + c_nc);
     int *comp_end = (int *)(tail + c_cend);
@@ -976,6 +995,50 @@ void ds4_csa_attention_backward(
 
     core_attention_backward(dq, dkeys, d_attn_sink, dcontext, q_heads, keys, probs, mask, NH, T, Tk, D);
 
+    float d_scores[DS4_MAX_T * DS4_MAX_COMP];
+    memset(d_scores, 0, sizeof(d_scores));
+    const float att_scale = 1.0f / sqrtf((float)D);
+    for (int t = 0; t < T; t++) {
+        for (int k = 0; k < n_comp; k++) {
+            if (!sparse_mask[(size_t)t * (size_t)n_comp + (size_t)k]) {
+                continue;
+            }
+            float ds = 0.0f;
+            for (int h = 0; h < NH; h++) {
+                const float *dk = dkeys + ((size_t)h * (size_t)Tk + (size_t)T + (size_t)k) * (size_t)D;
+                const float *qh = q_heads + ((size_t)h * (size_t)T + (size_t)t) * (size_t)D;
+                for (int d = 0; d < D; d++) {
+                    ds += dk[d] * qh[d];
+                }
+            }
+            d_scores[(size_t)t * (size_t)DS4_MAX_COMP + (size_t)k] = ds * att_scale;
+        }
+    }
+
+    float d_qmid[DS4_MAX_T * 32];
+    memset(d_qmid, 0, (size_t)T * (size_t)r * sizeof(float));
+    ds4_csa_indexer_backward(
+        dx,
+        d_qmid,
+        d_idx_wq_b,
+        d_idx_w_weights,
+        d_idx_w_kv,
+        d_idx_w_gate,
+        d_idx_pos_bias,
+        d_idx_norm,
+        d_scores,
+        hidden,
+        q_mid,
+        T,
+        n_comp,
+        cfg,
+        idx_wq_b,
+        idx_w_weights,
+        idx_w_kv,
+        idx_w_gate,
+        idx_norm,
+        idx_cache);
+
     float d_comp[DS4_MAX_COMP * 32];
     memset(d_comp, 0, (size_t)n_comp * (size_t)D * sizeof(float));
     for (int h = 0; h < NH; h++) {
@@ -999,7 +1062,7 @@ void ds4_csa_attention_backward(
         csa_w_kv,
         csa_w_gate,
         csa_norm,
-        csa_cache);
+        cache);
 
     for (int t = 0; t < T; t++) {
         float dkv_t[32];
@@ -1025,12 +1088,17 @@ void ds4_csa_attention_backward(
         float dqm[32];
         memset(dqm, 0, (size_t)r * sizeof(float));
         ds4_linear_backward(dqm, d_wq_b, dq_flat, q_mid + (size_t)t * (size_t)r, wq_b, attn_w, r);
+        for (int i = 0; i < r; i++) {
+            dqm[i] += d_qmid[(size_t)t * (size_t)r + (size_t)i];
+        }
         float dtmp[64];
         memset(dtmp, 0, (size_t)r * sizeof(float));
         ds4_rmsnorm_backward(dtmp, d_w_qa_norm, dqm, hidden + (size_t)t * (size_t)C, q_mid + (size_t)t * (size_t)r, w_qa_norm, 1, r, eps);
         ds4_linear_backward(dx + (size_t)t * (size_t)C, d_wq_a, dtmp, hidden + (size_t)t * (size_t)C, wq_a, r, C);
     }
     (void)csa_pos_bias;
+    (void)csa_cache;
     (void)attn_sink;
     (void)wq_a;
+    (void)idx_pos_bias;
 }

@@ -49,6 +49,7 @@ There is **no** official `deepseek-ai/DeepSeek-V4` training repo in C/CUDA (unli
 | 10 | `sliding_attn_train.c`, `v4_layer_train.c`, `-train-1layer` | V2 `-train-1layer` (MoE frozen) |
 | 11 | `hca_compressor_train.c`, `v4_attention_train.c`, `-train-full` | HCA backward + 2-layer hash_moe block train |
 | 12 | `csa_compressor_train.c`, CSA train path, `-train-4layer`; CUDA stub | `llm.c/train_gpt2.cu` |
+| 13 | `indexer_train.c`, indexer backward + AdamW on CSA layer | Lightning indexer in nano |
 
 Educational numbering mirrors notebooks → **`c/01_*.c` …** (optional rename as files land).
 

@@ -381,6 +381,12 @@ float ds4_model_train_step_1layer(
         NULL,
         NULL,
         NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
         lg.attn_hc_fn,
         lg.attn_hc_base,
         lg.attn_hc_scale,
@@ -488,7 +494,19 @@ static void adam_apply_full_layers(Ds4AdamW *opt, Ds4ModelWeights *w, const Deep
             adam_group(opt, &soff, lw->csa_w_gate, lg.csa_w_gate, (size_t)HD2 * (size_t)C);
             adam_group(opt, &soff, lw->csa_pos_bias, lg.csa_pos_bias, (size_t)cfg->compress_rate_csa * (size_t)HD2);
             adam_group(opt, &soff, lw->csa_norm, lg.csa_norm, (size_t)D);
-            /* Indexer weights: forward-only mask for now; grads stay zero. */
+            const int HD = cfg->index_head_dim;
+            const int NH = cfg->index_n_heads;
+            adam_group(opt, &soff, lw->idx_wq_b, lg.idx_wq_b, (size_t)(NH * HD) * (size_t)cfg->q_lora_rank);
+            adam_group(opt, &soff, lw->idx_w_weights, lg.idx_w_weights, (size_t)NH * (size_t)C);
+            adam_group(opt, &soff, lw->idx_w_kv, lg.idx_w_kv, (size_t)(2 * HD) * (size_t)C);
+            adam_group(opt, &soff, lw->idx_w_gate, lg.idx_w_gate, (size_t)(2 * HD) * (size_t)C);
+            adam_group(
+                opt,
+                &soff,
+                lw->idx_pos_bias,
+                lg.idx_pos_bias,
+                (size_t)cfg->compress_rate_csa * (size_t)(2 * HD));
+            adam_group(opt, &soff, lw->idx_norm, lg.idx_norm, (size_t)HD);
         }
         adam_group(opt, &soff, lw->attn_hc_fn, lg.attn_hc_fn, (size_t)mix * (size_t)C * (size_t)hc);
         adam_group(opt, &soff, lw->attn_hc_base, lg.attn_hc_base, (size_t)mix);
@@ -668,6 +686,12 @@ float ds4_model_train_step_full(
             lg.csa_w_gate,
             lg.csa_pos_bias,
             lg.csa_norm,
+            lg.idx_wq_b,
+            lg.idx_w_weights,
+            lg.idx_w_kv,
+            lg.idx_w_gate,
+            lg.idx_pos_bias,
+            lg.idx_norm,
             lg.attn_hc_fn,
             lg.attn_hc_base,
             lg.attn_hc_scale,
