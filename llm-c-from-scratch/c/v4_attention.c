@@ -1,6 +1,7 @@
 #include "v4_attention.h"
 
 #include "csa_compressor.h"
+#include "ds4_cuda.h"
 #include "hca_compressor.h"
 #include "rmsnorm.h"
 #include "rope.h"
@@ -127,7 +128,7 @@ void ds4_attention_forward(
         const float *xt = hidden + (size_t)t * (size_t)C;
         float *qm = q_mid + (size_t)t * (size_t)r;
         ds4_linear(wq_a, xt, tmp, r, C);
-        ds4_rmsnorm_forward(qm, tmp, w_qa_norm, 1, r, eps);
+        ds4_rmsnorm_forward_cuda(qm, tmp, w_qa_norm, 1, r, eps);
     }
 
     if (attn_type == DS4_ATTN_HCA) {
@@ -169,7 +170,7 @@ void ds4_attention_forward(
         }
         float *kvt = kv + (size_t)t * (size_t)D;
         ds4_linear(wkv, xt, tmp, D, C);
-        ds4_rmsnorm_forward(kvt, tmp, w_kv_norm, 1, D, eps);
+        ds4_rmsnorm_forward_cuda(kvt, tmp, w_kv_norm, 1, D, eps);
         ds4_apply_partial_rope_vec_t(
             kvt, D, rope_dim, cos_buf + (size_t)t * (size_t)rope_half, sin_buf + (size_t)t * (size_t)rope_half);
     }
@@ -206,7 +207,7 @@ void ds4_attention_forward(
         }
     }
 
-    ds4_core_attention(context, q_heads, keys, NH, T, Tk, D, attn_sink, mask);
+    ds4_core_attention_cuda(context, q_heads, keys, NH, T, Tk, D, attn_sink, mask);
 
     for (int t = 0; t < T; t++) {
         float *row = ctx_flat + (size_t)t * (size_t)attn_w;

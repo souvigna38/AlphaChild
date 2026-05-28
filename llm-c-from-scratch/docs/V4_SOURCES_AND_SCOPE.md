@@ -55,6 +55,7 @@ There is **no** official `deepseek-ai/DeepSeek-V4` training repo in C/CUDA (unli
 | 16 | `cuda/ds4_rmsnorm.cu`, `ds4_cuda.c`, `test_cuda_rmsnorm` | First CUDA kernel (RMSNorm forward) + CPU fallback |
 | 17 | `cuda/ds4_swiglu.cu`, `test_cuda_swiglu` | SwiGLU expert forward CUDA + CPU fallback |
 | 18 | `cuda/ds4_core_attention.cu`, `test_cuda_core_attention` | Sliding masked attention core (QK^T + sink) CUDA |
+| 19 | CUDA dispatch in `sliding_attn.c`, `v4_attention.c`, `ds4_cuda.c` in `V4_CORE` | Wire RMSNorm + core_attention into sliding/HCA/CSA forward |
 
 Educational numbering mirrors notebooks → **`c/01_*.c` …** (optional rename as files land).
 

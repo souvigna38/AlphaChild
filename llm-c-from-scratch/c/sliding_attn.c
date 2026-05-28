@@ -4,6 +4,7 @@
  */
 #include "sliding_attn.h"
 
+#include "ds4_cuda.h"
 #include "rmsnorm.h"
 #include "rope.h"
 #include "v4_ops.h"
@@ -160,7 +161,7 @@ void ds4_sliding_attn_forward(
         const float *xt = x + (size_t)t * (size_t)C;
         float *qm = q_mid + (size_t)t * (size_t)r;
         ds4_linear(wq_a, xt, tmp, r, C);
-        ds4_rmsnorm_forward(qm, tmp, w_qa_norm, 1, r, eps);
+        ds4_rmsnorm_forward_cuda(qm, tmp, w_qa_norm, 1, r, eps);
         ds4_linear(wq_b, qm, tmp, attn_w, r);
         for (int h = 0; h < NH; h++) {
             float *qh = q_heads + ((size_t)h * (size_t)T + (size_t)t) * (size_t)D;
@@ -171,7 +172,7 @@ void ds4_sliding_attn_forward(
         }
         float *kvt = kv + (size_t)t * (size_t)D;
         ds4_linear(wkv, xt, tmp, D, C);
-        ds4_rmsnorm_forward(kvt, tmp, w_kv_norm, 1, D, eps);
+        ds4_rmsnorm_forward_cuda(kvt, tmp, w_kv_norm, 1, D, eps);
         ds4_apply_partial_rope_vec_t(
             kvt, D, rope_dim, cos_buf + (size_t)t * (size_t)rope_half, sin_buf + (size_t)t * (size_t)rope_half);
     }
@@ -194,7 +195,7 @@ void ds4_sliding_attn_forward(
         }
     }
 
-    ds4_core_attention(context, q_heads, keys, NH, T, T, D, attn_sink, mask);
+    ds4_core_attention_cuda(context, q_heads, keys, NH, T, T, D, attn_sink, mask);
 
     for (int t = 0; t < T; t++) {
         float *row = ctx_flat + (size_t)t * (size_t)attn_w;

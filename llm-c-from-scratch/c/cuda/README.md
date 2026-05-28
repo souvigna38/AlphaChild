@@ -6,7 +6,7 @@ Hot paths to port from `llm.c/train_gpt2.cu` once CPU backward matches nano tiny
 - **SwiGLU expert forward** (`cuda/ds4_swiglu.cu`) — Phase 17
 - **Core masked attention** (`cuda/ds4_core_attention.cu`) — Phase 18 (QK^T + sink softmax V)
 - SwiGLU batched GEMV (multi-token)
-- Full sliding_attn forward on GPU
+- Full sliding_attn forward on GPU (projections still CPU; Phase 19 wires RMSNorm + core_attention)
 - Hash-MoE gather / routed MoE top-k
 
 CPU reference: `make test_v4`, `-train-1layer`, `-train-full`, `-train-4layer`, and `-train-e2e` in `train_deepseek_v4_tiny.c`.

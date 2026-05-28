@@ -12,7 +12,8 @@
  * Phase 15: verify_v4_parity.py — deterministic forward golden vs nano config check
  * Phase 16: CUDA RMSNorm forward (ds4_rmsnorm_forward_cuda)
  * Phase 17: CUDA SwiGLU forward (ds4_swiglu_forward_cuda)
- * Phase 18: CUDA core_attention (ds4_core_attention_cuda); see make cuda-stub
+ * Phase 18: CUDA core_attention (ds4_core_attention_cuda)
+ * Phase 19: CUDA wired into sliding/HCA/CSA forward (rmsnorm + core_attention dispatch)
  */
 
 #include "deepseek_v4_config.h"
@@ -814,7 +815,7 @@ int main(int argc, char **argv) {
         return run_train_e2e(train_e2e_steps, lr, data_path);
     }
 
-    printf("=== DeepSeek-V4 C port (phases 0–18) ===\n");
+    printf("=== DeepSeek-V4 C port (phases 0–19) ===\n");
     printf("Reference: vendor/nano-deepseek-v4/nano_deepseek_v4/modeling.py\n");
     printf("Notebook:  ../18.DeepSeekV4Path.ipynb\n\n");
 
@@ -848,7 +849,7 @@ int main(int argc, char **argv) {
 
     ds4_config_free(&cfg);
     printf("  parity: python3 ../scripts/verify_v4_parity.py\n");
-    printf("  cuda: make cuda-stub  # RMSNorm + SwiGLU + core_attention GPU checks\n");
-    printf("\nPhase 0–18 OK (forward + train modes + parity + CUDA kernels)\n");
+    printf("  cuda: make cuda-stub  # kernel + sliding integration checks\n");
+    printf("\nPhase 0–19 OK (forward + train + parity + CUDA in sliding attn)\n");
     return 0;
 }
