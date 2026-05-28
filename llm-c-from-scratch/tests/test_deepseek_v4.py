@@ -115,6 +115,19 @@ def test_c_cuda_swiglu_smoke():
     assert "OK" in out.stdout
 
 
+def test_c_cuda_core_attention_smoke():
+    if not (C_DIR / "bin" / "test_cuda_core_attention").exists():
+        subprocess.run(["make", "bin/test_cuda_core_attention"], cwd=C_DIR, check=True)
+    out = subprocess.run(
+        [str(C_DIR / "bin" / "test_cuda_core_attention")],
+        cwd=C_DIR,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "OK" in out.stdout
+
+
 def test_c_v4_parity_smoke():
     if not (C_DIR / "bin" / "test_v4_parity").exists():
         subprocess.run(["make", "bin/test_v4_parity"], cwd=C_DIR, check=True)

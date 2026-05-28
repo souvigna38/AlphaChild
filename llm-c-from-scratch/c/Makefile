@@ -21,10 +21,12 @@ BIN_V4_PARITY = bin/test_v4_parity
 BIN_INDEXER_TRAIN = bin/test_indexer_train
 BIN_CUDA_RMSNORM = bin/test_cuda_rmsnorm
 BIN_CUDA_SWIGLU = bin/test_cuda_swiglu
+BIN_CUDA_CORE_ATTN = bin/test_cuda_core_attention
+DS4_CUDA_CPU_SRCS = ds4_cuda.c rmsnorm.c swiglu.c rope.c sliding_attn.c v4_ops.c deepseek_v4_config.c
 NVCC ?= nvcc
 HAVE_NVCC := $(shell command -v $(NVCC) >/dev/null 2>&1 && echo 1)
 ifeq ($(HAVE_NVCC),1)
-  CUDA_OBJS = cuda/ds4_rmsnorm.o cuda/ds4_swiglu.o
+  CUDA_OBJS = cuda/ds4_rmsnorm.o cuda/ds4_swiglu.o cuda/ds4_core_attention.o
   DS4_CUDA_CFLAGS = -DDS4_HAVE_CUDA
   DS4_CUDA_LDFLAGS = -L/usr/local/cuda/lib64 -L/usr/lib/x86_64-linux-gnu -lcudart
 else
@@ -75,7 +77,7 @@ test: $(BIN_V4)
 
 SRCS_HASH_MOE_TRAIN = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c hash_moe_train.c test_hash_moe_train.c
 
-test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD) $(BIN_V4_TRAIN_FINAL) $(BIN_V4_TRAIN_1LAYER) $(BIN_V4_TRAIN_FULL) $(BIN_V4_TRAIN_4LAYER) $(BIN_V4_TRAIN_E2E) $(BIN_V4_PARITY) $(BIN_CUDA_RMSNORM) $(BIN_CUDA_SWIGLU) $(BIN_INDEXER_TRAIN)
+test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD) $(BIN_V4_TRAIN_FINAL) $(BIN_V4_TRAIN_1LAYER) $(BIN_V4_TRAIN_FULL) $(BIN_V4_TRAIN_4LAYER) $(BIN_V4_TRAIN_E2E) $(BIN_V4_PARITY) $(BIN_CUDA_RMSNORM) $(BIN_CUDA_SWIGLU) $(BIN_CUDA_CORE_ATTN) $(BIN_INDEXER_TRAIN)
 	./$(BIN_V4)
 	./$(BIN_SWIGLU)
 	./$(BIN_HASH_MOE)
@@ -93,6 +95,7 @@ test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLI
 	./$(BIN_V4_PARITY)
 	./$(BIN_CUDA_RMSNORM)
 	./$(BIN_CUDA_SWIGLU)
+	./$(BIN_CUDA_CORE_ATTN)
 	./$(BIN_INDEXER_TRAIN)
 	./$(BIN_HASH_MOE_TRAIN)
 
@@ -137,19 +140,26 @@ cuda/ds4_rmsnorm.o: cuda/ds4_rmsnorm.cu
 	$(NVCC) -O2 -std=c++14 -c -o $@ $<
 cuda/ds4_swiglu.o: cuda/ds4_swiglu.cu
 	$(NVCC) -O2 -std=c++14 -c -o $@ $<
+cuda/ds4_core_attention.o: cuda/ds4_core_attention.cu
+	$(NVCC) -O2 -std=c++14 -c -o $@ $<
 endif
 
-$(BIN_CUDA_RMSNORM): ds4_cuda.c rmsnorm.c swiglu.c v4_ops.c test_cuda_rmsnorm.c $(CUDA_OBJS)
+$(BIN_CUDA_RMSNORM): $(DS4_CUDA_CPU_SRCS) test_cuda_rmsnorm.c $(CUDA_OBJS)
 	mkdir -p bin
-	$(CC) $(CFLAGS) $(DS4_CUDA_CFLAGS) -o $@ ds4_cuda.c rmsnorm.c swiglu.c v4_ops.c test_cuda_rmsnorm.c $(CUDA_OBJS) $(LDFLAGS) $(DS4_CUDA_LDFLAGS)
+	$(CC) $(CFLAGS) $(DS4_CUDA_CFLAGS) -o $@ $(DS4_CUDA_CPU_SRCS) test_cuda_rmsnorm.c $(CUDA_OBJS) $(LDFLAGS) $(DS4_CUDA_LDFLAGS)
 
-$(BIN_CUDA_SWIGLU): ds4_cuda.c rmsnorm.c swiglu.c v4_ops.c test_cuda_swiglu.c $(CUDA_OBJS)
+$(BIN_CUDA_SWIGLU): $(DS4_CUDA_CPU_SRCS) test_cuda_swiglu.c $(CUDA_OBJS)
 	mkdir -p bin
-	$(CC) $(CFLAGS) $(DS4_CUDA_CFLAGS) -o $@ ds4_cuda.c rmsnorm.c swiglu.c v4_ops.c test_cuda_swiglu.c $(CUDA_OBJS) $(LDFLAGS) $(DS4_CUDA_LDFLAGS)
+	$(CC) $(CFLAGS) $(DS4_CUDA_CFLAGS) -o $@ $(DS4_CUDA_CPU_SRCS) test_cuda_swiglu.c $(CUDA_OBJS) $(LDFLAGS) $(DS4_CUDA_LDFLAGS)
 
-cuda-stub: $(BIN_CUDA_RMSNORM) $(BIN_CUDA_SWIGLU)
+$(BIN_CUDA_CORE_ATTN): $(DS4_CUDA_CPU_SRCS) test_cuda_core_attention.c $(CUDA_OBJS)
+	mkdir -p bin
+	$(CC) $(CFLAGS) $(DS4_CUDA_CFLAGS) -o $@ $(DS4_CUDA_CPU_SRCS) test_cuda_core_attention.c $(CUDA_OBJS) $(LDFLAGS) $(DS4_CUDA_LDFLAGS)
+
+cuda-stub: $(BIN_CUDA_RMSNORM) $(BIN_CUDA_SWIGLU) $(BIN_CUDA_CORE_ATTN)
 	./$(BIN_CUDA_RMSNORM)
 	./$(BIN_CUDA_SWIGLU)
+	./$(BIN_CUDA_CORE_ATTN)
 
 $(BIN_V4_MOE): $(SRCS_V4_MOE_BIN)
 	mkdir -p bin

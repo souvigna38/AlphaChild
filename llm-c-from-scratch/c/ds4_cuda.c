@@ -1,6 +1,7 @@
 #include "ds4_cuda.h"
 
 #include "rmsnorm.h"
+#include "sliding_attn.h"
 #include "swiglu.h"
 
 #ifdef DS4_HAVE_CUDA
@@ -14,6 +15,16 @@ extern int ds4_cuda_swiglu_forward_launch(
     const float *gate_up_w,
     const float *down_w,
     float swiglu_limit);
+extern int ds4_cuda_core_attention_launch(
+    float *context,
+    const float *q,
+    const float *keys,
+    int NH,
+    int Tq,
+    int Tk,
+    int head_dim,
+    const float *attn_sink,
+    const int *mask);
 #endif
 
 int ds4_cuda_device_count(void) {
@@ -52,4 +63,23 @@ void ds4_swiglu_forward_cuda(
     }
 #endif
     ds4_swiglu_forward(out, x, hidden, intermediate, gate_up_w, down_w, swiglu_limit);
+}
+
+void ds4_core_attention_cuda(
+    float *context,
+    const float *q,
+    const float *keys,
+    int NH,
+    int Tq,
+    int Tk,
+    int head_dim,
+    const float *attn_sink,
+    const int *mask) {
+#ifdef DS4_HAVE_CUDA
+    if (NH > 0 && Tq > 0 && Tk > 0 && head_dim > 0 &&
+        ds4_cuda_core_attention_launch(context, q, keys, NH, Tq, Tk, head_dim, attn_sink, mask) == 0) {
+        return;
+    }
+#endif
+    ds4_core_attention(context, q, keys, NH, Tq, Tk, head_dim, attn_sink, mask);
 }
