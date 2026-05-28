@@ -60,6 +60,13 @@ int dsv2_load_text_dataset(Dsv2Dataset *ds, const char *path) {
 
     ds->n_tokens = (int)sz;
     ds->tokens = (int *)malloc((size_t)ds->n_tokens * sizeof(int));
+    if (!ds->tokens) {
+        free(text);
+        free(ds->vocab.chars);
+        free(ds->vocab.stoi);
+        memset(ds, 0, sizeof(*ds));
+        return -1;
+    }
     for (int i = 0; i < ds->n_tokens; i++) {
         ds->tokens[i] = ds->vocab.stoi[(unsigned char)text[i]];
     }
@@ -75,13 +82,20 @@ void dsv2_dataset_free(Dsv2Dataset *ds) {
 }
 
 void dsv2_get_batch(const int *tokens, int n_tokens, int *idx, int *targets, int B, int T, unsigned int *seed) {
+    if (!tokens || n_tokens < T + 2 || !idx || !targets || T <= 0 || B <= 0) {
+        return;
+    }
     for (int b = 0; b < B; b++) {
         *seed = *seed * 1103515245u + 12345u;
         int max_start = n_tokens - T - 1;
-        int start = (int)((*seed >> 16) % (unsigned int)(max_start > 0 ? max_start : 1));
+        if (max_start <= 0) {
+            max_start = 1;
+        }
+        int start = (int)((*seed >> 16) % (unsigned int)max_start);
         for (int t = 0; t < T; t++) {
-            idx[b * T + t] = tokens[start + t];
-            targets[b * T + t] = tokens[start + t + 1];
+            int pos = start + t;
+            idx[b * T + t] = tokens[pos];
+            targets[b * T + t] = tokens[pos + 1];
         }
     }
 }

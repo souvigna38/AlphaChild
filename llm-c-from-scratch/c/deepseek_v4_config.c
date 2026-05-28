@@ -62,6 +62,21 @@ void ds4_config_init_1layer(DeepSeekV4Config *cfg) {
     ds4_fill_default_schedules(cfg);
 }
 
+void ds4_config_init_train_full(DeepSeekV4Config *cfg) {
+    ds4_config_init_tiny(cfg);
+    free(cfg->layer_types);
+    free(cfg->mlp_layer_types);
+    cfg->num_hidden_layers = 2;
+    cfg->num_hash_layers = 2;
+    cfg->compress_rate_hca = 4;
+    cfg->layer_types = (Ds4AttentionType *)malloc(2 * sizeof(Ds4AttentionType));
+    cfg->mlp_layer_types = (Ds4MlpType *)malloc(2 * sizeof(Ds4MlpType));
+    cfg->layer_types[0] = DS4_ATTN_SLIDING;
+    cfg->layer_types[1] = DS4_ATTN_HCA;
+    cfg->mlp_layer_types[0] = DS4_MLP_HASH_MOE;
+    cfg->mlp_layer_types[1] = DS4_MLP_HASH_MOE;
+}
+
 void ds4_config_free(DeepSeekV4Config *cfg) {
     free(cfg->layer_types);
     free(cfg->mlp_layer_types);

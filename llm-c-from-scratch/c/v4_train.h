@@ -54,6 +54,28 @@ float ds4_model_train_step_1layer(
     float *logits,
     float *token_scratch);
 
+size_t ds4_model_train_full_param_count(const DeepSeekV4Config *cfg);
+
+size_t ds4_model_train_full_layer_cache_floats(const DeepSeekV4Config *cfg, int T);
+
+/*
+ * Phase 11: 2-layer train-full (sliding + HCA, hash_moe), AdamW on embed + layers; head frozen.
+ */
+float ds4_model_train_step_full(
+    Ds4ModelWeights *weights,
+    const DeepSeekV4Config *cfg,
+    const int *input_ids,
+    const int *targets,
+    int T,
+    Ds4AdamW *opt,
+    float *grad_buf,
+    float *streams_a,
+    float *streams_b,
+    float *model_scratch,
+    float *layer_caches,
+    float *logits,
+    float *token_scratch);
+
 float ds4_model_train_final_adam_step(
     Ds4ModelWeights *weights,
     const DeepSeekV4Config *cfg,

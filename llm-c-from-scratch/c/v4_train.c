@@ -221,7 +221,7 @@ float ds4_model_train_final_adam_step(
 }
 
 size_t ds4_model_1layer_param_count(const DeepSeekV4Config *cfg) {
-    return (size_t)cfg->vocab_size * (size_t)cfg->hidden_size + ds4_layer_attn_param_count(cfg);
+    return (size_t)cfg->vocab_size * (size_t)cfg->hidden_size + ds4_layer_attn_param_count_layer(cfg, 0);
 }
 
 size_t ds4_model_train_1layer_working_bytes(const DeepSeekV4Config *cfg, int T) {
@@ -373,12 +373,17 @@ float ds4_model_train_step_1layer(
         lg.attn_sink,
         lg.wo_a,
         lg.wo_b,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
         lg.attn_hc_fn,
         lg.attn_hc_base,
         lg.attn_hc_scale,
         lg.attn_norm_w,
         attn_scratch,
-        layer_cache);
+        layer_cache,
+        0);
 
     for (int t = 0; t < T; t++) {
         for (int i = 0; i < hc; i++) {
@@ -402,11 +407,279 @@ float ds4_model_train_step_1layer(
         lg.wo_a,
         (size_t)cfg->o_groups * (size_t)cfg->o_lora_rank * (size_t)(ds4_attention_width(cfg) / cfg->o_groups),
         lr);
-    sgd_update(lw->wo_b, lg.wo_b, (size_t)C * (size_t)cfg->o_lora_rank, lr);
+    sgd_update(lw->wo_b, lg.wo_b, (size_t)C * (size_t)cfg->o_groups * (size_t)cfg->o_lora_rank, lr);
     sgd_update(lw->attn_hc_fn, lg.attn_hc_fn, (size_t)mix * (size_t)C * (size_t)hc, lr);
     sgd_update(lw->attn_hc_base, lg.attn_hc_base, (size_t)mix, lr);
     sgd_update(lw->attn_hc_scale, lg.attn_hc_scale, 3, lr);
 
+    free(d_streams_out);
+    return loss_sum / (float)T;
+}
+
+size_t ds4_model_train_full_param_count(const DeepSeekV4Config *cfg) {
+    size_t n = (size_t)cfg->vocab_size * (size_t)cfg->hidden_size;
+    for (int L = 0; L < cfg->num_hidden_layers; L++) {
+        n += ds4_layer_train_param_count(cfg, L);
+    }
+    return n;
+}
+
+size_t ds4_model_train_full_layer_cache_floats(const DeepSeekV4Config *cfg, int T) {
+    size_t n = 0;
+    for (int L = 0; L < cfg->num_hidden_layers; L++) {
+        n += ds4_layer_train_cache_layer(cfg, T, L);
+    }
+    return n;
+}
+
+static void adam_group(Ds4AdamW *opt, size_t *state_off, float *p, const float *g, size_t n) {
+    if (n > 0 && p && g) {
+        ds4_adamw_step_group(opt, *state_off, n, p, g, 0);
+        *state_off += n;
+    }
+}
+
+static void adam_apply_full_layers(Ds4AdamW *opt, Ds4ModelWeights *w, const DeepSeekV4Config *cfg, float *grad) {
+    const int C = cfg->hidden_size;
+    const int hc = cfg->hc_mult;
+    const int mix = (2 + hc) * hc;
+    size_t goff = 0;
+    size_t soff = 0;
+    adam_group(opt, &soff, w->embed, grad + goff, (size_t)cfg->vocab_size * (size_t)C);
+    goff += (size_t)cfg->vocab_size * (size_t)C;
+    for (int L = 0; L < cfg->num_hidden_layers; L++) {
+        Ds4LayerWeights *lw = &w->layers[L];
+        Ds4LayerTrainGrads lg;
+        ds4_layer_train_grad_ptrs(&lg, grad + goff, cfg, L);
+        adam_group(opt, &soff, lw->attn_norm_w, lg.attn_norm_w, (size_t)C);
+        adam_group(opt, &soff, lw->wq_a, lg.wq_a, (size_t)cfg->q_lora_rank * (size_t)C);
+        adam_group(opt, &soff, lw->w_qa_norm, lg.w_qa_norm, (size_t)cfg->q_lora_rank);
+        adam_group(
+            opt,
+            &soff,
+            lw->wq_b,
+            lg.wq_b,
+            (size_t)ds4_attention_width(cfg) * (size_t)cfg->q_lora_rank);
+        adam_group(opt, &soff, lw->wkv, lg.wkv, (size_t)C * (size_t)C);
+        adam_group(opt, &soff, lw->w_kv_norm, lg.w_kv_norm, (size_t)C);
+        adam_group(opt, &soff, lw->attn_sink, lg.attn_sink, (size_t)cfg->num_attention_heads);
+        adam_group(
+            opt,
+            &soff,
+            lw->wo_a,
+            lg.wo_a,
+            (size_t)cfg->o_groups * (size_t)cfg->o_lora_rank *
+                (size_t)(ds4_attention_width(cfg) / cfg->o_groups));
+        adam_group(opt, &soff, lw->wo_b, lg.wo_b, (size_t)C * (size_t)cfg->o_groups * (size_t)cfg->o_lora_rank);
+        if (cfg->layer_types[L] == DS4_ATTN_HCA) {
+            const int D = cfg->head_dim;
+            adam_group(opt, &soff, lw->hca_w_kv, lg.hca_w_kv, (size_t)D * (size_t)C);
+            adam_group(opt, &soff, lw->hca_w_gate, lg.hca_w_gate, (size_t)D * (size_t)C);
+            adam_group(opt, &soff, lw->hca_pos_bias, lg.hca_pos_bias, (size_t)cfg->compress_rate_hca * (size_t)D);
+            adam_group(opt, &soff, lw->hca_norm, lg.hca_norm, (size_t)D);
+        }
+        adam_group(opt, &soff, lw->attn_hc_fn, lg.attn_hc_fn, (size_t)mix * (size_t)C * (size_t)hc);
+        adam_group(opt, &soff, lw->attn_hc_base, lg.attn_hc_base, (size_t)mix);
+        adam_group(opt, &soff, lw->attn_hc_scale, lg.attn_hc_scale, 3);
+        if (cfg->mlp_layer_types[L] == DS4_MLP_HASH_MOE) {
+            const int E = cfg->n_routed_experts;
+            const int I = cfg->moe_intermediate_size;
+            const int S = cfg->n_shared_experts;
+            adam_group(opt, &soff, lw->ffn_norm_w, lg.ffn_norm_w, (size_t)C);
+            adam_group(opt, &soff, lw->moe_gate, lg.moe_gate, (size_t)E * (size_t)C);
+            adam_group(opt, &soff, lw->moe_expert_gu, lg.moe_expert_gu, (size_t)E * (size_t)I * 2 * (size_t)C);
+            adam_group(opt, &soff, lw->moe_expert_down, lg.moe_expert_down, (size_t)E * (size_t)C * (size_t)I);
+            adam_group(opt, &soff, lw->moe_shared_gu, lg.moe_shared_gu, (size_t)S * (size_t)I * 2 * (size_t)C);
+            adam_group(opt, &soff, lw->moe_shared_down, lg.moe_shared_down, (size_t)C * (size_t)I);
+        }
+        goff += ds4_layer_train_param_count(cfg, L);
+    }
+}
+
+float ds4_model_train_step_full(
+    Ds4ModelWeights *weights,
+    const DeepSeekV4Config *cfg,
+    const int *input_ids,
+    const int *targets,
+    int T,
+    Ds4AdamW *opt,
+    float *grad_buf,
+    float *streams_a,
+    float *streams_b,
+    float *model_scratch,
+    float *layer_caches,
+    float *logits,
+    float *token_scratch) {
+    const int C = cfg->hidden_size;
+    const int V = cfg->vocab_size;
+    const int hc = cfg->hc_mult;
+    const int nL = cfg->num_hidden_layers;
+    const float eps = cfg->rms_norm_eps;
+
+    size_t attn_n = ds4_attention_scratch_bytes(cfg, T) / sizeof(float);
+    size_t moe_n = ds4_moe_scratch_bytes(cfg) / sizeof(float);
+    size_t layer_total = ds4_layer_scratch_bytes(cfg, T) / sizeof(float);
+    float *attn_scratch = model_scratch;
+    float *moe_scratch = attn_scratch + attn_n;
+    float *layer_work = moe_scratch + moe_n;
+    float *hidden = model_scratch + layer_total;
+    float *norm_h = hidden + (size_t)T * (size_t)C;
+
+    for (int t = 0; t < T; t++) {
+        const float *emb = weights->embed + (size_t)input_ids[t] * (size_t)C;
+        for (int i = 0; i < hc; i++) {
+            memcpy(streams_a + ((size_t)t * (size_t)hc + (size_t)i) * (size_t)C, emb, (size_t)C * sizeof(float));
+        }
+    }
+
+    size_t lc_off = 0;
+    float *cur = streams_a;
+    float *nxt = streams_b;
+    for (int L = 0; L < nL; L++) {
+        ds4_decoder_layer_forward_train(
+            nxt,
+            cur,
+            input_ids,
+            T,
+            L,
+            cfg,
+            &weights->layers[L],
+            attn_scratch,
+            moe_scratch,
+            layer_work,
+            layer_caches + lc_off);
+        lc_off += ds4_layer_train_cache_layer(cfg, T, L);
+        float *tmp = cur;
+        cur = nxt;
+        nxt = tmp;
+    }
+
+    const float *final_streams = (nL % 2 == 0) ? streams_a : streams_b;
+    for (int t = 0; t < T; t++) {
+        ds4_hyper_head_forward(
+            hidden + (size_t)t * (size_t)C,
+            final_streams + ((size_t)t * (size_t)hc) * (size_t)C,
+            cfg,
+            weights->hc_head_fn,
+            weights->hc_head_base,
+            weights->hc_head_scale);
+        ds4_rmsnorm_forward(norm_h + (size_t)t * (size_t)C, hidden + (size_t)t * (size_t)C, weights->final_norm, 1, C, eps);
+        for (int v = 0; v < V; v++) {
+            logits[(size_t)t * (size_t)V + (size_t)v] =
+                ds4_dot(norm_h + (size_t)t * (size_t)C, weights->lm_head + (size_t)v * (size_t)C, C);
+        }
+    }
+
+    memset(grad_buf, 0, ds4_model_train_full_param_count(cfg) * sizeof(float));
+    float *g_embed = grad_buf;
+    float scale = 1.0f / (float)T;
+    float loss_sum = 0.0f;
+
+    if (C > DS4_TRAIN_MAX_C || hc > DS4_TRAIN_MAX_HC || T > DS4_TRAIN_MAX_T) {
+        return 0.0f;
+    }
+
+    float *d_streams_out = (float *)calloc((size_t)T * (size_t)hc * (size_t)C, sizeof(float));
+    float flat_sc[DS4_TRAIN_MAX_HC * DS4_TRAIN_MAX_C];
+    float mixv_sc[DS4_TRAIN_MAX_HC];
+    float dx_hc[DS4_TRAIN_MAX_HC * DS4_TRAIN_MAX_C];
+    if (!d_streams_out) {
+        return 0.0f;
+    }
+
+    for (int t = 0; t < T; t++) {
+        float *dlog = token_scratch;
+        int y = targets[t];
+        loss_sum += ds4_softmax_cross_entropy_backward(dlog, logits + (size_t)t * (size_t)V, y, V);
+        for (int v = 0; v < V; v++) {
+            dlog[v] *= scale;
+        }
+        float dnorm_h[DS4_TRAIN_MAX_C];
+        memset(dnorm_h, 0, (size_t)C * sizeof(float));
+        ds4_linear_backward(dnorm_h, NULL, dlog, norm_h + (size_t)t * (size_t)C, weights->lm_head, V, C);
+        float dpre[DS4_TRAIN_MAX_C];
+        ds4_rmsnorm_backward(dpre, NULL, dnorm_h, hidden + (size_t)t * (size_t)C, norm_h + (size_t)t * (size_t)C, weights->final_norm, 1, C, eps);
+        const float *st = final_streams + ((size_t)t * (size_t)hc) * (size_t)C;
+        ds4_hyper_head_forward_save(
+            hidden + (size_t)t * (size_t)C,
+            st,
+            cfg,
+            weights->hc_head_fn,
+            weights->hc_head_base,
+            weights->hc_head_scale,
+            flat_sc,
+            mixv_sc);
+        memset(dx_hc, 0, (size_t)hc * (size_t)C * sizeof(float));
+        ds4_hyper_head_backward(
+            dx_hc, NULL, NULL, NULL, dpre, st, flat_sc, mixv_sc, cfg, weights->hc_head_fn, weights->hc_head_base, weights->hc_head_scale);
+        memcpy(d_streams_out + ((size_t)t * (size_t)hc) * (size_t)C, dx_hc, (size_t)hc * (size_t)C * sizeof(float));
+    }
+
+    float *d_cur = d_streams_out;
+    float *d_nxt = (float *)calloc((size_t)T * (size_t)hc * (size_t)C, sizeof(float));
+    if (!d_nxt) {
+        free(d_streams_out);
+        return 0.0f;
+    }
+    for (int L = nL - 1; L >= 0; L--) {
+        size_t lc_base = 0;
+        for (int i = 0; i < L; i++) {
+            lc_base += ds4_layer_train_cache_layer(cfg, T, i);
+        }
+        Ds4LayerTrainGrads lg;
+        size_t goff = (size_t)V * (size_t)C;
+        for (int i = 0; i < L; i++) {
+            goff += ds4_layer_train_param_count(cfg, i);
+        }
+        ds4_layer_train_grad_ptrs(&lg, grad_buf + goff, cfg, L);
+        ds4_decoder_layer_backward_full(
+            d_nxt,
+            d_cur,
+            input_ids,
+            T,
+            L,
+            cfg,
+            &weights->layers[L],
+            lg.wq_a,
+            lg.w_qa_norm,
+            lg.wq_b,
+            lg.wkv,
+            lg.w_kv_norm,
+            lg.attn_sink,
+            lg.wo_a,
+            lg.wo_b,
+            lg.hca_w_kv,
+            lg.hca_w_gate,
+            lg.hca_pos_bias,
+            lg.hca_norm,
+            lg.attn_hc_fn,
+            lg.attn_hc_base,
+            lg.attn_hc_scale,
+            lg.attn_norm_w,
+            lg.ffn_norm_w,
+            lg.moe_gate,
+            lg.moe_expert_gu,
+            lg.moe_expert_down,
+            lg.moe_shared_gu,
+            lg.moe_shared_down,
+            attn_scratch,
+            moe_scratch,
+            layer_caches + lc_base);
+        float *tmp = d_cur;
+        d_cur = d_nxt;
+        d_nxt = tmp;
+    }
+    for (int t = 0; t < T; t++) {
+        for (int i = 0; i < hc; i++) {
+            for (int c = 0; c < C; c++) {
+                g_embed[(size_t)input_ids[t] * (size_t)C + (size_t)c] += d_cur[((size_t)t * (size_t)hc + (size_t)i) * (size_t)C + (size_t)c];
+            }
+        }
+    }
+
+    opt->step++;
+    adam_apply_full_layers(opt, weights, cfg, grad_buf);
+    free(d_nxt);
     free(d_streams_out);
     return loss_sum / (float)T;
 }

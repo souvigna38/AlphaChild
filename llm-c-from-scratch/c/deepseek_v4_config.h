@@ -58,6 +58,8 @@ typedef struct {
 void ds4_config_init_tiny(DeepSeekV4Config *cfg);
 /* One sliding-attention + hash_moe layer (Phase 10 -train-1layer). */
 void ds4_config_init_1layer(DeepSeekV4Config *cfg);
+/* Two layers: sliding + HCA, both hash_moe (Phase 11 -train-full). */
+void ds4_config_init_train_full(DeepSeekV4Config *cfg);
 void ds4_config_free(DeepSeekV4Config *cfg);
 void ds4_config_print(const DeepSeekV4Config *cfg);
 
