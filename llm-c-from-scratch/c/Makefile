@@ -16,6 +16,7 @@ BIN_V4_TRAIN_FINAL = bin/test_v4_train_final
 BIN_V4_TRAIN_1LAYER = bin/test_v4_train_1layer
 BIN_V4_TRAIN_FULL = bin/test_v4_train_full
 BIN_V4_TRAIN_4LAYER = bin/test_v4_train_4layer
+BIN_V4_TRAIN_E2E = bin/test_v4_train_e2e
 BIN_INDEXER_TRAIN = bin/test_indexer_train
 BIN_HASH_MOE_TRAIN = bin/test_hash_moe_train
 BIN_MLA = bin/test_mla
@@ -29,6 +30,7 @@ SRCS_V4_TRAIN_FINAL = $(V4_CORE) test_v4_train_final.c
 SRCS_V4_TRAIN_1LAYER = $(V4_CORE) test_v4_train_1layer.c
 SRCS_V4_TRAIN_FULL = $(V4_CORE) test_v4_train_full.c
 SRCS_V4_TRAIN_4LAYER = $(V4_CORE) test_v4_train_4layer.c
+SRCS_V4_TRAIN_E2E = $(V4_CORE) test_v4_train_e2e.c
 SRCS_INDEXER_TRAIN = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c indexer.c indexer_train.c test_indexer_train.c
 SRCS_V4_MOE = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c moe.c test_moe.c
 SRCS_V4_MOE_BIN = $(SRCS_V4_MOE)
@@ -60,7 +62,7 @@ test: $(BIN_V4)
 
 SRCS_HASH_MOE_TRAIN = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c hash_moe_train.c test_hash_moe_train.c
 
-test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD) $(BIN_V4_TRAIN_FINAL) $(BIN_V4_TRAIN_1LAYER) $(BIN_V4_TRAIN_FULL) $(BIN_V4_TRAIN_4LAYER) $(BIN_INDEXER_TRAIN)
+test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD) $(BIN_V4_TRAIN_FINAL) $(BIN_V4_TRAIN_1LAYER) $(BIN_V4_TRAIN_FULL) $(BIN_V4_TRAIN_4LAYER) $(BIN_V4_TRAIN_E2E) $(BIN_INDEXER_TRAIN)
 	./$(BIN_V4)
 	./$(BIN_SWIGLU)
 	./$(BIN_HASH_MOE)
@@ -74,6 +76,7 @@ test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLI
 	./$(BIN_V4_TRAIN_1LAYER)
 	./$(BIN_V4_TRAIN_FULL)
 	./$(BIN_V4_TRAIN_4LAYER)
+	./$(BIN_V4_TRAIN_E2E)
 	./$(BIN_INDEXER_TRAIN)
 	./$(BIN_HASH_MOE_TRAIN)
 
@@ -100,6 +103,10 @@ $(BIN_V4_TRAIN_FULL): $(SRCS_V4_TRAIN_FULL)
 $(BIN_V4_TRAIN_4LAYER): $(SRCS_V4_TRAIN_4LAYER)
 	mkdir -p bin
 	$(CC) $(CFLAGS) -o $@ $(SRCS_V4_TRAIN_4LAYER) $(LDFLAGS)
+
+$(BIN_V4_TRAIN_E2E): $(SRCS_V4_TRAIN_E2E)
+	mkdir -p bin
+	$(CC) $(CFLAGS) -o $@ $(SRCS_V4_TRAIN_E2E) $(LDFLAGS)
 
 $(BIN_INDEXER_TRAIN): $(SRCS_INDEXER_TRAIN)
 	mkdir -p bin

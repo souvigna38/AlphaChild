@@ -76,6 +76,37 @@ float ds4_model_train_step_full(
     float *logits,
     float *token_scratch);
 
+/* embed + all layers + final_norm + hc_head + lm_head (Phase 14 -train-e2e). */
+size_t ds4_model_train_e2e_param_count(const DeepSeekV4Config *cfg);
+
+typedef struct {
+    float *final_norm_w;
+    float *hc_head_fn;
+    float *hc_head_base;
+    float *hc_head_scale;
+    float *lm_head;
+} Ds4E2eHeadGrads;
+
+void ds4_e2e_head_grad_ptrs(Ds4E2eHeadGrads *g, float *buf, const DeepSeekV4Config *cfg);
+
+/*
+ * Phase 14: 4-layer train with unfrozen lm_head + final_norm + hc_head (same config as -train-4layer).
+ */
+float ds4_model_train_step_e2e(
+    Ds4ModelWeights *weights,
+    const DeepSeekV4Config *cfg,
+    const int *input_ids,
+    const int *targets,
+    int T,
+    Ds4AdamW *opt,
+    float *grad_buf,
+    float *streams_a,
+    float *streams_b,
+    float *model_scratch,
+    float *layer_caches,
+    float *logits,
+    float *token_scratch);
+
 float ds4_model_train_final_adam_step(
     Ds4ModelWeights *weights,
     const DeepSeekV4Config *cfg,

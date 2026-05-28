@@ -97,6 +97,15 @@ def test_c_indexer_train_smoke():
     assert "OK" in out.stdout
 
 
+def test_c_v4_train_e2e_smoke():
+    if not (C_DIR / "bin" / "test_v4_train_e2e").exists():
+        subprocess.run(["make", "bin/test_v4_train_e2e"], cwd=C_DIR, check=True)
+    out = subprocess.run(
+        [str(C_DIR / "bin" / "test_v4_train_e2e")], cwd=C_DIR, capture_output=True, text=True, check=True
+    )
+    assert "OK" in out.stdout
+
+
 def test_c_v4_train_4layer_smoke():
     if not (C_DIR / "bin" / "test_v4_train_4layer").exists():
         subprocess.run(["make", "bin/test_v4_train_4layer"], cwd=C_DIR, check=True)
