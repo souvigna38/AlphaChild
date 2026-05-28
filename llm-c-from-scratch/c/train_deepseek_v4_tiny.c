@@ -9,6 +9,7 @@
  * Phase 12: -train-4layer N — 4-layer block (sliding+HCA+CSA+sliding, hash_moe; head frozen)
  * Phase 13: indexer backward on CSA layer (train-4layer includes indexer AdamW)
  * Phase 14: -train-e2e N — 4-layer + lm_head/final_norm/hc_head AdamW (full stack trainable)
+ * Phase 15: verify_v4_parity.py — deterministic forward golden vs nano config check
  */
 
 #include "deepseek_v4_config.h"
@@ -810,7 +811,7 @@ int main(int argc, char **argv) {
         return run_train_e2e(train_e2e_steps, lr, data_path);
     }
 
-    printf("=== DeepSeek-V4 C port (phases 0–14) ===\n");
+    printf("=== DeepSeek-V4 C port (phases 0–15) ===\n");
     printf("Reference: vendor/nano-deepseek-v4/nano_deepseek_v4/modeling.py\n");
     printf("Notebook:  ../18.DeepSeekV4Path.ipynb\n\n");
 
@@ -843,6 +844,7 @@ int main(int argc, char **argv) {
     printf("  full model: make bin/test_v4_model && ./bin/test_v4_model\n");
 
     ds4_config_free(&cfg);
-    printf("\nPhase 0–14 OK (forward + train modes through train-e2e)\n");
+    printf("  parity: python3 ../scripts/verify_v4_parity.py\n");
+    printf("\nPhase 0–15 OK (forward + train modes + parity golden)\n");
     return 0;
 }

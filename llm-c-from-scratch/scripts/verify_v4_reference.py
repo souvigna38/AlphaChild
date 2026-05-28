@@ -37,6 +37,9 @@ def main() -> None:
     print("nano-deepseek-v4 tiny forward OK")
     print("  hidden=%d layers=%d" % (cfg.hidden_size, cfg.num_hidden_layers))
     print("  logits shape:", tuple(logits.shape))
+    print("  layer_types:", cfg.layer_types)
+    print("  mlp_layer_types:", cfg.mlp_layer_types)
+    print("  For C golden parity: python3 scripts/verify_v4_parity.py")
 
 
 if __name__ == "__main__":

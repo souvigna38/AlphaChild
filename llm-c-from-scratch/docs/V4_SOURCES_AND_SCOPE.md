@@ -51,6 +51,7 @@ There is **no** official `deepseek-ai/DeepSeek-V4` training repo in C/CUDA (unli
 | 12 | `csa_compressor_train.c`, CSA train path, `-train-4layer`; CUDA stub | `llm.c/train_gpt2.cu` |
 | 13 | `indexer_train.c`, indexer backward + AdamW on CSA layer | Lightning indexer in nano |
 | 14 | `ds4_model_train_step_e2e`, `-train-e2e` | Unfreeze lm_head + final_norm + hc_head on 4-layer block |
+| 15 | `v4_parity.c`, `test_v4_parity`, `verify_v4_parity.py` | Deterministic forward golden + config vs nano |
 
 Educational numbering mirrors notebooks → **`c/01_*.c` …** (optional rename as files land).
 
@@ -67,4 +68,5 @@ Run reference (Python, after `./scripts/setup_vendor.sh`):
 ```bash
 cd llm-c-from-scratch
 python3 scripts/verify_v4_reference.py
+python3 scripts/verify_v4_parity.py
 ```
