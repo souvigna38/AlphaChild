@@ -10,7 +10,8 @@
  * Phase 13: indexer backward on CSA layer (train-4layer includes indexer AdamW)
  * Phase 14: -train-e2e N — 4-layer + lm_head/final_norm/hc_head AdamW (full stack trainable)
  * Phase 15: verify_v4_parity.py — deterministic forward golden vs nano config check
- * Phase 16: CUDA RMSNorm forward (ds4_rmsnorm_forward_cuda); see make cuda-stub
+ * Phase 16: CUDA RMSNorm forward (ds4_rmsnorm_forward_cuda)
+ * Phase 17: CUDA SwiGLU forward (ds4_swiglu_forward_cuda); see make cuda-stub
  */
 
 #include "deepseek_v4_config.h"
@@ -812,7 +813,7 @@ int main(int argc, char **argv) {
         return run_train_e2e(train_e2e_steps, lr, data_path);
     }
 
-    printf("=== DeepSeek-V4 C port (phases 0–16) ===\n");
+    printf("=== DeepSeek-V4 C port (phases 0–17) ===\n");
     printf("Reference: vendor/nano-deepseek-v4/nano_deepseek_v4/modeling.py\n");
     printf("Notebook:  ../18.DeepSeekV4Path.ipynb\n\n");
 
@@ -846,7 +847,7 @@ int main(int argc, char **argv) {
 
     ds4_config_free(&cfg);
     printf("  parity: python3 ../scripts/verify_v4_parity.py\n");
-    printf("  cuda: make cuda-stub && ./bin/test_cuda_rmsnorm\n");
-    printf("\nPhase 0–16 OK (forward + train modes + parity + CUDA RMSNorm)\n");
+    printf("  cuda: make cuda-stub  # RMSNorm + SwiGLU GPU checks\n");
+    printf("\nPhase 0–17 OK (forward + train modes + parity + CUDA RMSNorm/SwiGLU)\n");
     return 0;
 }
