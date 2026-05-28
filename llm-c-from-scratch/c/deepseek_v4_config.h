@@ -60,6 +60,9 @@ void ds4_config_init_tiny(DeepSeekV4Config *cfg);
 void ds4_config_init_1layer(DeepSeekV4Config *cfg);
 /* Two layers: sliding + HCA, both hash_moe (Phase 11 -train-full). */
 void ds4_config_init_train_full(DeepSeekV4Config *cfg);
+
+/* Four layers: sliding + HCA + CSA + sliding, all hash_moe (Phase 12 -train-4layer). */
+void ds4_config_init_train_4layer(DeepSeekV4Config *cfg);
 void ds4_config_free(DeepSeekV4Config *cfg);
 void ds4_config_print(const DeepSeekV4Config *cfg);
 

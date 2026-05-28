@@ -17,6 +17,9 @@ static size_t attn_cache_floats(const DeepSeekV4Config *cfg, int T, int layer_id
     if (t == DS4_ATTN_HCA) {
         return ds4_hca_attention_train_cache_floats(cfg, T);
     }
+    if (t == DS4_ATTN_CSA) {
+        return ds4_csa_attention_train_cache_floats(cfg, T);
+    }
     return ds4_sliding_attn_train_cache_floats(cfg, T);
 }
 
@@ -24,6 +27,22 @@ static size_t hca_extra_param_count(const DeepSeekV4Config *cfg) {
     const int D = cfg->head_dim;
     const int C = cfg->hidden_size;
     return (size_t)D * (size_t)C * 2 + (size_t)cfg->compress_rate_hca * (size_t)D + (size_t)D;
+}
+
+static size_t csa_extra_param_count(const DeepSeekV4Config *cfg) {
+    const int D = cfg->head_dim;
+    const int C = cfg->hidden_size;
+    const int HD2 = 2 * D;
+    return (size_t)HD2 * (size_t)C * 2 + (size_t)cfg->compress_rate_csa * (size_t)HD2 + (size_t)D;
+}
+
+static size_t indexer_extra_param_count(const DeepSeekV4Config *cfg) {
+    const int C = cfg->hidden_size;
+    const int HD = cfg->index_head_dim;
+    const int NH = cfg->index_n_heads;
+    const int r = cfg->q_lora_rank;
+  return (size_t)(NH * HD) * (size_t)r + (size_t)NH * (size_t)C + (size_t)(2 * HD) * (size_t)C * 2 +
+         (size_t)cfg->compress_rate_csa * (size_t)(2 * HD) + (size_t)HD;
 }
 
 size_t ds4_layer_hash_moe_param_count(const DeepSeekV4Config *cfg) {
@@ -41,6 +60,8 @@ size_t ds4_layer_attn_param_count_layer(const DeepSeekV4Config *cfg, int layer_i
     size_t n = ds4_layer_attn_param_count(cfg);
     if (cfg->layer_types[layer_idx] == DS4_ATTN_HCA) {
         n += hca_extra_param_count(cfg);
+    } else if (cfg->layer_types[layer_idx] == DS4_ATTN_CSA) {
+        n += csa_extra_param_count(cfg) + indexer_extra_param_count(cfg);
     }
     return n;
 }
@@ -228,6 +249,32 @@ void ds4_decoder_layer_forward_train(
             w->hca_norm,
             attn_scratch,
             layer_cache + attn_off);
+    } else if (attn_type == DS4_ATTN_CSA) {
+        ds4_csa_attention_forward_train(
+            attn_out,
+            norm_buf,
+            T,
+            cfg,
+            w->wq_a,
+            w->w_qa_norm,
+            w->wq_b,
+            w->wkv,
+            w->w_kv_norm,
+            w->attn_sink,
+            w->wo_a,
+            w->wo_b,
+            w->csa_w_kv,
+            w->csa_w_gate,
+            w->csa_pos_bias,
+            w->csa_norm,
+            w->idx_wq_b,
+            w->idx_w_weights,
+            w->idx_w_kv,
+            w->idx_w_gate,
+            w->idx_pos_bias,
+            w->idx_norm,
+            attn_scratch,
+            layer_cache + attn_off);
     } else {
         ds4_attention_forward(
             attn_out,
@@ -352,6 +399,10 @@ void ds4_decoder_layer_backward_attn(
     float *d_hca_w_gate,
     float *d_hca_pos_bias,
     float *d_hca_norm,
+    float *d_csa_w_kv,
+    float *d_csa_w_gate,
+    float *d_csa_pos_bias,
+    float *d_csa_norm,
     float *d_attn_hc_fn,
     float *d_attn_hc_base,
     float *d_attn_hc_scale,
@@ -546,6 +597,68 @@ void ds4_decoder_layer_backward_attn(
                 w->attn_hc_base,
                 w->attn_hc_scale);
         }
+    } else if (attn_type == DS4_ATTN_CSA) {
+        float d_ln[512];
+        memset(d_ln, 0, (size_t)T * (size_t)C * sizeof(float));
+        ds4_csa_attention_backward(
+            d_ln,
+            d_wq_a,
+            d_w_qa_norm,
+            d_wq_b,
+            d_wkv,
+            d_w_kv_norm,
+            d_attn_sink,
+            d_wo_a,
+            d_wo_b,
+            d_csa_w_kv,
+            d_csa_w_gate,
+            d_csa_pos_bias,
+            d_csa_norm,
+            d_attn_out,
+            x_ln,
+            T,
+            cfg,
+            w->wq_a,
+            w->w_qa_norm,
+            w->wq_b,
+            w->wkv,
+            w->w_kv_norm,
+            w->attn_sink,
+            w->wo_a,
+            w->wo_b,
+            w->csa_w_kv,
+            w->csa_w_gate,
+            w->csa_pos_bias,
+            w->csa_norm,
+            attn_scratch,
+            layer_cache + attn_off);
+        for (int t = 0; t < T; t++) {
+            float *lc = layer_cache + (size_t)t * ptok;
+            const float *post_a = lc;
+            const float *comb_a = lc + (size_t)hc;
+            const float *flat_a = comb_a + (size_t)hc * (size_t)hc;
+            const float *mixv_a = flat_a + (size_t)hc * (size_t)C;
+            const float *coll_a = mixv_a + (size_t)mix;
+            const float *ln_out = coll_a + (size_t)C;
+            const float *st_in = lc + sin_off;
+            float d_coll[64];
+            ds4_rmsnorm_backward(d_coll, d_attn_norm_w, d_ln + (size_t)t * (size_t)C, coll_a, ln_out, w->attn_norm_w, 1, C, eps);
+            ds4_hyper_connection_backward(
+                dstreams_in + ((size_t)t * (size_t)hc) * (size_t)C,
+                d_attn_hc_fn,
+                d_attn_hc_base,
+                d_attn_hc_scale,
+                d_coll,
+                st_in,
+                post_a,
+                comb_a,
+                flat_a,
+                mixv_a,
+                cfg,
+                w->attn_hc_fn,
+                w->attn_hc_base,
+                w->attn_hc_scale);
+        }
     }
     (void)input_ids;
     (void)eps;
@@ -591,8 +704,35 @@ void ds4_layer_train_grad_ptrs(Ds4LayerTrainGrads *g, float *buf, const DeepSeek
         off += (size_t)cfg->compress_rate_hca * (size_t)D;
         g->hca_norm = buf + off;
         off += (size_t)D;
+        g->csa_w_kv = g->csa_w_gate = g->csa_pos_bias = g->csa_norm = NULL;
+        g->idx_wq_b = g->idx_w_weights = g->idx_w_kv = g->idx_w_gate = g->idx_pos_bias = g->idx_norm = NULL;
+    } else if (cfg->layer_types[layer_idx] == DS4_ATTN_CSA) {
+        const int HD = cfg->index_head_dim;
+        g->hca_w_kv = g->hca_w_gate = g->hca_pos_bias = g->hca_norm = NULL;
+        g->csa_w_kv = buf + off;
+        off += (size_t)(2 * D) * (size_t)C;
+        g->csa_w_gate = buf + off;
+        off += (size_t)(2 * D) * (size_t)C;
+        g->csa_pos_bias = buf + off;
+        off += (size_t)cfg->compress_rate_csa * (size_t)(2 * D);
+        g->csa_norm = buf + off;
+        off += (size_t)D;
+        g->idx_wq_b = buf + off;
+        off += (size_t)(cfg->index_n_heads * HD) * (size_t)r;
+        g->idx_w_weights = buf + off;
+        off += (size_t)cfg->index_n_heads * (size_t)C;
+        g->idx_w_kv = buf + off;
+        off += (size_t)(2 * HD) * (size_t)C;
+        g->idx_w_gate = buf + off;
+        off += (size_t)(2 * HD) * (size_t)C;
+        g->idx_pos_bias = buf + off;
+        off += (size_t)cfg->compress_rate_csa * (size_t)(2 * HD);
+        g->idx_norm = buf + off;
+        off += (size_t)HD;
     } else {
         g->hca_w_kv = g->hca_w_gate = g->hca_pos_bias = g->hca_norm = NULL;
+        g->csa_w_kv = g->csa_w_gate = g->csa_pos_bias = g->csa_norm = NULL;
+        g->idx_wq_b = g->idx_w_weights = g->idx_w_kv = g->idx_w_gate = g->idx_pos_bias = g->idx_norm = NULL;
     }
     g->attn_hc_fn = buf + off;
     off += (size_t)mix * (size_t)C * (size_t)hc;
@@ -640,6 +780,10 @@ void ds4_decoder_layer_backward_full(
     float *d_hca_w_gate,
     float *d_hca_pos_bias,
     float *d_hca_norm,
+    float *d_csa_w_kv,
+    float *d_csa_w_gate,
+    float *d_csa_pos_bias,
+    float *d_csa_norm,
     float *d_attn_hc_fn,
     float *d_attn_hc_base,
     float *d_attn_hc_scale,
@@ -735,6 +879,10 @@ void ds4_decoder_layer_backward_full(
         d_hca_w_gate,
         d_hca_pos_bias,
         d_hca_norm,
+        d_csa_w_kv,
+        d_csa_w_gate,
+        d_csa_pos_bias,
+        d_csa_norm,
         d_attn_hc_fn,
         d_attn_hc_base,
         d_attn_hc_scale,

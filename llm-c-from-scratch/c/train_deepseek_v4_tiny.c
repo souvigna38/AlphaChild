@@ -6,6 +6,7 @@
  * Phase 9: -train-adam N — AdamW on embed+lm_head+final_norm+hc_head (layers frozen)
  * Phase 10: -train-1layer N — 1-layer sliding attn backward (MoE/head frozen)
  * Phase 11: -train-full N — 2-layer block (sliding+HCA, hash_moe backward; head frozen)
+ * Phase 12: -train-4layer N — 4-layer block (sliding+HCA+CSA+sliding, hash_moe; head frozen)
  */
 
 #include "deepseek_v4_config.h"
@@ -537,10 +538,108 @@ static int run_train_full(int steps, float lr, const char *data_path) {
     return 0;
 }
 
+static int run_train_4layer(int steps, float lr, const char *data_path) {
+    setvbuf(stdout, NULL, _IONBF, 0);
+    DeepSeekV4Config cfg;
+    ds4_config_init_train_4layer(&cfg);
+    const int nL = cfg.num_hidden_layers;
+    const int T = 8;
+    const int C = cfg.hidden_size;
+    const int V = cfg.vocab_size;
+    const int hc = cfg.hc_mult;
+    unsigned int seed = 88u;
+
+    Dsv2Dataset ds = {0};
+    int use_data = 0;
+    int load_ret = -1;
+    if (data_path) {
+        load_ret = dsv2_load_text_dataset(&ds, data_path);
+    }
+    if (load_ret == 0 && ds.n_tokens > T + 2) {
+        use_data = 1;
+        printf("  dataset: %s (%d tokens)\n", data_path, ds.n_tokens);
+    } else {
+        printf("  dataset: synthetic random ids\n");
+    }
+
+    Ds4ModelWeights mw = {0};
+    mw.embed = (float *)calloc((size_t)V * (size_t)C, sizeof(float));
+    mw.lm_head = (float *)calloc((size_t)V * (size_t)C, sizeof(float));
+    mw.final_norm = (float *)calloc((size_t)C, sizeof(float));
+    mw.final_norm[0] = 1.0f;
+    mw.hc_head_fn = (float *)calloc((size_t)hc * (size_t)hc * (size_t)C, sizeof(float));
+    mw.hc_head_base = (float *)calloc((size_t)hc, sizeof(float));
+    mw.hc_head_scale[0] = 1.0f;
+    mw.layers = (Ds4LayerWeights *)calloc((size_t)nL, sizeof(Ds4LayerWeights));
+    for (int L = 0; L < nL; L++) {
+        fill_layer_min(&mw.layers[L], &cfg, L, 1);
+    }
+    for (size_t i = 0; i < (size_t)V * (size_t)C; i++) {
+        seed = seed * 1103515245u + 12345u;
+        mw.embed[i] = 0.002f * (float)((int)(seed % 1000) - 500);
+    }
+
+    int *ids = (int *)malloc((size_t)T * sizeof(int));
+    int *targets = (int *)malloc((size_t)T * sizeof(int));
+    float *logits = (float *)calloc((size_t)T * (size_t)V, sizeof(float));
+    float *sa = (float *)calloc((size_t)T * (size_t)hc * (size_t)C, sizeof(float));
+    float *sb = (float *)calloc((size_t)T * (size_t)hc * (size_t)C, sizeof(float));
+    float *model_scratch = (float *)malloc(ds4_model_scratch_bytes(&cfg, T));
+    float *layer_cache = (float *)calloc(ds4_model_train_full_layer_cache_floats(&cfg, T), sizeof(float));
+    size_t ngrad = ds4_model_train_full_param_count(&cfg);
+    float *grad = (float *)calloc(ngrad, sizeof(float));
+    float *tok = (float *)calloc((size_t)V, sizeof(float));
+
+    Ds4AdamW opt;
+    ds4_adamw_init(&opt, ngrad, lr, 0.0f);
+
+    printf("\n--- Phase 12: train-4layer (sliding+HCA+CSA+sliding, hash_moe; head frozen) ---\n");
+    for (int s = 0; s < steps; s++) {
+        if (use_data) {
+            dsv2_get_batch(ds.tokens, ds.n_tokens, ids, targets, 1, T, &seed);
+            for (int t = 0; t < T; t++) {
+                ids[t] %= V;
+                targets[t] %= V;
+            }
+        } else {
+            for (int t = 0; t < T; t++) {
+                seed = seed * 1103515245u + 12345u;
+                ids[t] = (int)(seed % (unsigned int)V);
+                seed = seed * 1103515245u + 12345u;
+                targets[t] = (int)(seed % (unsigned int)V);
+            }
+        }
+        float loss = ds4_model_train_step_full(&mw, &cfg, ids, targets, T, &opt, grad, sa, sb, model_scratch, layer_cache, logits, tok);
+        if (s == 0 || (s + 1) % 10 == 0 || s == steps - 1) {
+            printf("  step %4d  loss %.4f\n", s + 1, loss);
+        }
+    }
+
+    printf("Phase 12 train-4layer OK\n");
+    if (use_data && ds.n_tokens > 500000) {
+        _exit(0);
+    }
+    ds4_adamw_free(&opt);
+    free(tok);
+    free(grad);
+    free(layer_cache);
+    free(model_scratch);
+    free(sa);
+    free(sb);
+    free(logits);
+    free(targets);
+    free(ids);
+    if (use_data) {
+        dsv2_dataset_free(&ds);
+    }
+    ds4_config_free(&cfg);
+    return 0;
+}
+
 static void usage(const char *prog) {
     fprintf(
         stderr,
-        "Usage: %s [smoke] | -train-head STEPS | -train-adam STEPS | -train-1layer STEPS | -train-full STEPS [-lr LR] [-data path.txt]\n",
+        "Usage: %s [smoke] | -train-head STEPS | -train-adam STEPS | -train-1layer STEPS | -train-full STEPS | -train-4layer STEPS [-lr LR] [-data path.txt]\n",
         prog);
 }
 
@@ -549,6 +648,7 @@ int main(int argc, char **argv) {
     int train_adam_steps = 0;
     int train_1layer_steps = 0;
     int train_full_steps = 0;
+    int train_4layer_steps = 0;
     float lr = 0.05f;
     int lr_from_argv = 0;
     const char *data_path = "../data/tiny_shakespeare.txt";
@@ -562,6 +662,8 @@ int main(int argc, char **argv) {
             train_1layer_steps = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-train-full") == 0 && i + 1 < argc) {
             train_full_steps = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "-train-4layer") == 0 && i + 1 < argc) {
+            train_4layer_steps = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-lr") == 0 && i + 1 < argc) {
             lr = (float)atof(argv[++i]);
             lr_from_argv = 1;
@@ -591,8 +693,14 @@ int main(int argc, char **argv) {
         }
         return run_train_full(train_full_steps, lr, data_path);
     }
+    if (train_4layer_steps > 0) {
+        if (!lr_from_argv) {
+            lr = 0.01f;
+        }
+        return run_train_4layer(train_4layer_steps, lr, data_path);
+    }
 
-    printf("=== DeepSeek-V4 C port (phases 0–11) ===\n");
+    printf("=== DeepSeek-V4 C port (phases 0–12) ===\n");
     printf("Reference: vendor/nano-deepseek-v4/nano_deepseek_v4/modeling.py\n");
     printf("Notebook:  ../18.DeepSeekV4Path.ipynb\n\n");
 
@@ -620,9 +728,10 @@ int main(int argc, char **argv) {
     printf("  train-adam: ./bin/train_deepseek_v4_tiny -train-adam 20\n");
     printf("  train-1layer: ./bin/train_deepseek_v4_tiny -train-1layer 20\n");
     printf("  train-full: ./bin/train_deepseek_v4_tiny -train-full 20\n");
+    printf("  train-4layer: ./bin/train_deepseek_v4_tiny -train-4layer 20\n");
     printf("  full model: make bin/test_v4_model && ./bin/test_v4_model\n");
 
     ds4_config_free(&cfg);
-    printf("\nPhase 0–11 OK (forward + train-head + train-final + train-1layer + train-full)\n");
+    printf("\nPhase 0–12 OK (forward + train-head + train-final + train-1layer + train-full + train-4layer)\n");
     return 0;
 }

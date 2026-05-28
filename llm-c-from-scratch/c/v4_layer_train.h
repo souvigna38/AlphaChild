@@ -42,6 +42,10 @@ void ds4_decoder_layer_backward_attn(
     float *d_hca_w_gate,
     float *d_hca_pos_bias,
     float *d_hca_norm,
+    float *d_csa_w_kv,
+    float *d_csa_w_gate,
+    float *d_csa_pos_bias,
+    float *d_csa_norm,
     float *d_attn_hc_fn,
     float *d_attn_hc_base,
     float *d_attn_hc_scale,
@@ -71,6 +75,10 @@ void ds4_decoder_layer_backward_full(
     float *d_hca_w_gate,
     float *d_hca_pos_bias,
     float *d_hca_norm,
+    float *d_csa_w_kv,
+    float *d_csa_w_gate,
+    float *d_csa_pos_bias,
+    float *d_csa_norm,
     float *d_attn_hc_fn,
     float *d_attn_hc_base,
     float *d_attn_hc_scale,
@@ -124,6 +132,16 @@ typedef struct {
     float *hca_w_gate;
     float *hca_pos_bias;
     float *hca_norm;
+    float *csa_w_kv;
+    float *csa_w_gate;
+    float *csa_pos_bias;
+    float *csa_norm;
+    float *idx_wq_b;
+    float *idx_w_weights;
+    float *idx_w_kv;
+    float *idx_w_gate;
+    float *idx_pos_bias;
+    float *idx_norm;
     float *attn_hc_fn;
     float *attn_hc_base;
     float *attn_hc_scale;

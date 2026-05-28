@@ -15,17 +15,19 @@ BIN_V4_TRAIN_HEAD = bin/test_v4_train_head
 BIN_V4_TRAIN_FINAL = bin/test_v4_train_final
 BIN_V4_TRAIN_1LAYER = bin/test_v4_train_1layer
 BIN_V4_TRAIN_FULL = bin/test_v4_train_full
+BIN_V4_TRAIN_4LAYER = bin/test_v4_train_4layer
 BIN_HASH_MOE_TRAIN = bin/test_hash_moe_train
 BIN_MLA = bin/test_mla
 BIN_MOE = bin/test_moe
 BIN_BLOCK = bin/test_block
 BIN_TRAIN = bin/train_v2_tiny
-V4_CORE = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c swiglu.c hash_moe.c hash_moe_train.c moe.c sliding_attn.c sliding_attn_train.c hca_compressor.c hca_compressor_train.c csa_compressor.c indexer.c mhc.c v4_attention.c v4_attention_train.c v4_layer.c v4_layer_train.c v4_model.c v4_train.c adamw.c
+V4_CORE = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c swiglu.c hash_moe.c hash_moe_train.c moe.c sliding_attn.c sliding_attn_train.c hca_compressor.c hca_compressor_train.c csa_compressor.c csa_compressor_train.c indexer.c mhc.c v4_attention.c v4_attention_train.c v4_layer.c v4_layer_train.c v4_model.c v4_train.c adamw.c
 SRCS_V4 = $(V4_CORE) deepseek_v2/data.c train_deepseek_v4_tiny.c
 SRCS_V4_TRAIN_HEAD = $(V4_CORE) test_v4_train_head.c
 SRCS_V4_TRAIN_FINAL = $(V4_CORE) test_v4_train_final.c
 SRCS_V4_TRAIN_1LAYER = $(V4_CORE) test_v4_train_1layer.c
 SRCS_V4_TRAIN_FULL = $(V4_CORE) test_v4_train_full.c
+SRCS_V4_TRAIN_4LAYER = $(V4_CORE) test_v4_train_4layer.c
 SRCS_V4_MOE = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c moe.c test_moe.c
 SRCS_V4_MOE_BIN = $(SRCS_V4_MOE)
 SRCS_V4_MODEL = $(V4_CORE) test_v4_model.c
@@ -56,7 +58,7 @@ test: $(BIN_V4)
 
 SRCS_HASH_MOE_TRAIN = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c hash_moe_train.c test_hash_moe_train.c
 
-test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD) $(BIN_V4_TRAIN_FINAL) $(BIN_V4_TRAIN_1LAYER) $(BIN_V4_TRAIN_FULL)
+test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD) $(BIN_V4_TRAIN_FINAL) $(BIN_V4_TRAIN_1LAYER) $(BIN_V4_TRAIN_FULL) $(BIN_V4_TRAIN_4LAYER)
 	./$(BIN_V4)
 	./$(BIN_SWIGLU)
 	./$(BIN_HASH_MOE)
@@ -69,6 +71,7 @@ test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLI
 	./$(BIN_V4_TRAIN_FINAL)
 	./$(BIN_V4_TRAIN_1LAYER)
 	./$(BIN_V4_TRAIN_FULL)
+	./$(BIN_V4_TRAIN_4LAYER)
 	./$(BIN_HASH_MOE_TRAIN)
 
 $(BIN_HASH_MOE_TRAIN): $(SRCS_HASH_MOE_TRAIN)
@@ -90,6 +93,19 @@ $(BIN_V4_TRAIN_1LAYER): $(SRCS_V4_TRAIN_1LAYER)
 $(BIN_V4_TRAIN_FULL): $(SRCS_V4_TRAIN_FULL)
 	mkdir -p bin
 	$(CC) $(CFLAGS) -o $@ $(SRCS_V4_TRAIN_FULL) $(LDFLAGS)
+
+$(BIN_V4_TRAIN_4LAYER): $(SRCS_V4_TRAIN_4LAYER)
+	mkdir -p bin
+	$(CC) $(CFLAGS) -o $@ $(SRCS_V4_TRAIN_4LAYER) $(LDFLAGS)
+
+cuda-stub:
+	@if command -v nvcc >/dev/null 2>&1; then \
+		mkdir -p bin; \
+		nvcc -O2 -std=c++14 -o bin/v4_cuda_stub cuda/v4_kernels_stub.cu; \
+		./bin/v4_cuda_stub; \
+	else \
+		echo "nvcc not found; CPU reference in make test_v4 (-train-4layer)"; \
+	fi
 
 $(BIN_V4_MOE): $(SRCS_V4_MOE_BIN)
 	mkdir -p bin

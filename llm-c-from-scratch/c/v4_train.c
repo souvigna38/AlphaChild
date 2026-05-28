@@ -377,6 +377,10 @@ float ds4_model_train_step_1layer(
         NULL,
         NULL,
         NULL,
+        NULL,
+        NULL,
+        NULL,
+        NULL,
         lg.attn_hc_fn,
         lg.attn_hc_base,
         lg.attn_hc_scale,
@@ -477,6 +481,14 @@ static void adam_apply_full_layers(Ds4AdamW *opt, Ds4ModelWeights *w, const Deep
             adam_group(opt, &soff, lw->hca_w_gate, lg.hca_w_gate, (size_t)D * (size_t)C);
             adam_group(opt, &soff, lw->hca_pos_bias, lg.hca_pos_bias, (size_t)cfg->compress_rate_hca * (size_t)D);
             adam_group(opt, &soff, lw->hca_norm, lg.hca_norm, (size_t)D);
+        } else if (cfg->layer_types[L] == DS4_ATTN_CSA) {
+            const int D = cfg->head_dim;
+            const int HD2 = 2 * D;
+            adam_group(opt, &soff, lw->csa_w_kv, lg.csa_w_kv, (size_t)HD2 * (size_t)C);
+            adam_group(opt, &soff, lw->csa_w_gate, lg.csa_w_gate, (size_t)HD2 * (size_t)C);
+            adam_group(opt, &soff, lw->csa_pos_bias, lg.csa_pos_bias, (size_t)cfg->compress_rate_csa * (size_t)HD2);
+            adam_group(opt, &soff, lw->csa_norm, lg.csa_norm, (size_t)D);
+            /* Indexer weights: forward-only mask for now; grads stay zero. */
         }
         adam_group(opt, &soff, lw->attn_hc_fn, lg.attn_hc_fn, (size_t)mix * (size_t)C * (size_t)hc);
         adam_group(opt, &soff, lw->attn_hc_base, lg.attn_hc_base, (size_t)mix);
@@ -652,6 +664,10 @@ float ds4_model_train_step_full(
             lg.hca_w_gate,
             lg.hca_pos_bias,
             lg.hca_norm,
+            lg.csa_w_kv,
+            lg.csa_w_gate,
+            lg.csa_pos_bias,
+            lg.csa_norm,
             lg.attn_hc_fn,
             lg.attn_hc_base,
             lg.attn_hc_scale,
