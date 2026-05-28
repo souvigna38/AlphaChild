@@ -1,0 +1,95 @@
+#ifndef MHC_H
+#define MHC_H
+
+#include "deepseek_v4_config.h"
+
+/*
+ * Manifold-Constrained Hyper-Connection (nano HyperConnection).
+ * streams: (hc_mult, hidden) per token — caller loops over T for sequences.
+ */
+
+void ds4_hyper_connection_forward(
+    float *post,
+    float *comb,
+    float *collapsed,
+    const float *streams,
+    const DeepSeekV4Config *cfg,
+    const float *fn_weight,
+    const float *fn_base,
+    const float *scale);
+
+void ds4_hyper_connection_forward_save(
+    float *post,
+    float *comb,
+    float *collapsed,
+    const float *streams,
+    const DeepSeekV4Config *cfg,
+    const float *fn_weight,
+    const float *fn_base,
+    const float *scale,
+    float *save_flat,
+    float *save_mixv);
+
+/* post/comb frozen; backprops to streams and optional attn_hc weights. */
+void ds4_hyper_connection_backward(
+    float *dstreams,
+    float *d_fn_weight,
+    float *d_fn_base,
+    float *d_scale,
+    const float *d_collapsed,
+    const float *streams,
+    const float *post,
+    const float *comb,
+    const float *flat,
+    const float *mixv,
+    const DeepSeekV4Config *cfg,
+    const float *fn_weight,
+    const float *fn_base,
+    const float *scale);
+
+void ds4_hc_stream_update_backward(
+    float *dstreams_in,
+    float *d_branch,
+    const float *dstreams_out,
+    const float *streams_in,
+    const float *post,
+    const float *comb,
+    int hc_mult,
+    int hidden);
+
+void ds4_hc_stream_update(
+    float *streams_out,
+    const float *streams_in,
+    const float *post,
+    const float *comb,
+    const float *branch,
+    int hc_mult,
+    int hidden);
+
+void ds4_hyper_head_forward(float *out, const float *streams, const DeepSeekV4Config *cfg, const float *fn_weight, const float *fn_base, const float *scale);
+
+void ds4_hyper_head_forward_save(
+    float *out,
+    const float *streams,
+    const DeepSeekV4Config *cfg,
+    const float *fn_weight,
+    const float *fn_base,
+    const float *scale,
+    float *save_flat,
+    float *save_mixv);
+
+void ds4_hyper_head_backward(
+    float *dstreams,
+    float *d_fn_weight,
+    float *d_fn_base,
+    float *d_scale,
+    const float *dout,
+    const float *streams,
+    const float *flat,
+    const float *mixv,
+    const DeepSeekV4Config *cfg,
+    const float *fn_weight,
+    const float *fn_base,
+    const float *scale);
+
+#endif /* MHC_H */

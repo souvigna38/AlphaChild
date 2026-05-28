@@ -1,0 +1,56 @@
+[project]
+name = "alphazero-from-scratch"
+version = "0.1.0"
+description = "AlphaZero implementation from scratch for board games"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "torch",
+    "matplotlib",
+    "tqdm",
+]
+
+[project.optional-dependencies]
+gym = [
+    "gymnasium",
+    "opencv-python",
+]
+atari = [
+    "gymnasium[atari,accept-rom-license]",
+    "opencv-python",
+]
+dev = [
+    "pytest",
+    "ruff",
+    "nbformat",
+    "nbclient",
+    "ipykernel",
+    "gymnasium",
+    "opencv-python",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B018", "E402"]
