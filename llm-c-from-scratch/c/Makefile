@@ -18,6 +18,8 @@ BIN_V4_TRAIN_FULL = bin/test_v4_train_full
 BIN_V4_TRAIN_4LAYER = bin/test_v4_train_4layer
 BIN_V4_TRAIN_E2E = bin/test_v4_train_e2e
 BIN_V4_PARITY = bin/test_v4_parity
+BIN_V4_LAYER_PARITY = bin/test_v4_layer_parity
+BIN_V4_TIED_HEAD = bin/test_v4_tied_head
 BIN_INDEXER_TRAIN = bin/test_indexer_train
 BIN_CUDA_RMSNORM = bin/test_cuda_rmsnorm
 BIN_CUDA_SWIGLU = bin/test_cuda_swiglu
@@ -52,12 +54,14 @@ SRCS_V4_TRAIN_FULL = $(V4_CORE) test_v4_train_full.c
 SRCS_V4_TRAIN_4LAYER = $(V4_CORE) test_v4_train_4layer.c
 SRCS_V4_TRAIN_E2E = $(V4_CORE) test_v4_train_e2e.c
 SRCS_V4_PARITY = $(V4_CORE) v4_parity.c test_v4_parity.c
+SRCS_V4_LAYER_PARITY = $(V4_CORE) v4_parity.c test_v4_layer_parity.c
+SRCS_V4_TIED_HEAD = $(V4_CORE) test_v4_tied_head.c
 SRCS_INDEXER_TRAIN = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c indexer.c indexer_train.c test_indexer_train.c
-SRCS_V4_MOE = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c moe.c test_moe.c
-SRCS_V4_MOE_BIN = $(SRCS_V4_MOE)
 SRCS_V4_MODEL = $(V4_CORE) test_v4_model.c
 SRCS_SWIGLU = v4_ops.c swiglu.c test_swiglu.c
-SRCS_HASH_MOE = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c test_hash_moe.c
+SRCS_HASH_MOE = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c swiglu.c sliding_attn.c ds4_cuda.c hash_moe.c test_hash_moe.c
+SRCS_V4_MOE = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c swiglu.c sliding_attn.c ds4_cuda.c hash_moe.c moe.c test_moe.c
+SRCS_V4_MOE_BIN = $(SRCS_V4_MOE)
 SRCS_SLIDING = deepseek_v4_config.c rmsnorm.c swiglu.c v4_ops.c rope.c sliding_attn.c ds4_cuda.c test_sliding_attn.c
 SRCS_MHC = deepseek_v4_config.c v4_ops.c mhc.c test_mhc.c
 SRCS_V4_ATTN = $(V4_CORE) test_v4_attention.c
@@ -81,9 +85,9 @@ $(BIN_MLA): $(SRCS_MLA)
 test: $(BIN_V4)
 	./$(BIN_V4)
 
-SRCS_HASH_MOE_TRAIN = deepseek_v4_config.c v4_ops.c swiglu.c hash_moe.c hash_moe_train.c test_hash_moe_train.c
+SRCS_HASH_MOE_TRAIN = deepseek_v4_config.c rmsnorm.c v4_ops.c rope.c swiglu.c sliding_attn.c ds4_cuda.c hash_moe.c hash_moe_train.c test_hash_moe_train.c
 
-test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD) $(BIN_V4_TRAIN_FINAL) $(BIN_V4_TRAIN_1LAYER) $(BIN_V4_TRAIN_FULL) $(BIN_V4_TRAIN_4LAYER) $(BIN_V4_TRAIN_E2E) $(BIN_V4_PARITY) $(BIN_CUDA_RMSNORM) $(BIN_CUDA_SWIGLU) $(BIN_CUDA_CORE_ATTN) $(BIN_CUDA_SLIDING) $(BIN_INDEXER_TRAIN)
+test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLIDING) $(BIN_MHC) $(BIN_V4_ATTN) $(BIN_V4_MOE) $(BIN_V4_MODEL) $(BIN_V4_TRAIN_HEAD) $(BIN_V4_TRAIN_FINAL) $(BIN_V4_TRAIN_1LAYER) $(BIN_V4_TRAIN_FULL) $(BIN_V4_TRAIN_4LAYER) $(BIN_V4_TRAIN_E2E) $(BIN_V4_PARITY) $(BIN_V4_LAYER_PARITY) $(BIN_V4_TIED_HEAD) $(BIN_CUDA_RMSNORM) $(BIN_CUDA_SWIGLU) $(BIN_CUDA_CORE_ATTN) $(BIN_CUDA_SLIDING) $(BIN_INDEXER_TRAIN)
 	./$(BIN_V4)
 	./$(BIN_SWIGLU)
 	./$(BIN_HASH_MOE)
@@ -99,6 +103,8 @@ test_v4: $(BIN_V4) $(BIN_SWIGLU) $(BIN_HASH_MOE) $(BIN_HASH_MOE_TRAIN) $(BIN_SLI
 	./$(BIN_V4_TRAIN_4LAYER)
 	./$(BIN_V4_TRAIN_E2E)
 	./$(BIN_V4_PARITY)
+	./$(BIN_V4_LAYER_PARITY)
+	./$(BIN_V4_TIED_HEAD)
 	./$(BIN_CUDA_RMSNORM)
 	./$(BIN_CUDA_SWIGLU)
 	./$(BIN_CUDA_CORE_ATTN)
@@ -137,6 +143,14 @@ $(BIN_V4_TRAIN_E2E): $(SRCS_V4_TRAIN_E2E) $(CUDA_OBJS)
 $(BIN_V4_PARITY): $(SRCS_V4_PARITY) $(CUDA_OBJS)
 	mkdir -p bin
 	$(CC) $(CFLAGS) $(V4_CFLAGS_CUDA) -o $@ $(SRCS_V4_PARITY) $(V4_LINK_CUDA) $(LDFLAGS) $(V4_LIBS_CUDA)
+
+$(BIN_V4_LAYER_PARITY): $(SRCS_V4_LAYER_PARITY) $(CUDA_OBJS)
+	mkdir -p bin
+	$(CC) $(CFLAGS) $(V4_CFLAGS_CUDA) -o $@ $(SRCS_V4_LAYER_PARITY) $(V4_LINK_CUDA) $(LDFLAGS) $(V4_LIBS_CUDA)
+
+$(BIN_V4_TIED_HEAD): $(SRCS_V4_TIED_HEAD)
+	mkdir -p bin
+	$(CC) $(CFLAGS) -o $@ $(SRCS_V4_TIED_HEAD) $(LDFLAGS)
 
 $(BIN_INDEXER_TRAIN): $(SRCS_INDEXER_TRAIN)
 	mkdir -p bin

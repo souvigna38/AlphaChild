@@ -7,12 +7,18 @@
 typedef struct {
     float *embed;
     float *lm_head;
+    int lm_head_tied; /* when set, lm_head == embed; logits use embed rows */
     float *final_norm;
     float *hc_head_fn;
     float *hc_head_base;
     float hc_head_scale[3];
     Ds4LayerWeights *layers;
 } Ds4ModelWeights;
+
+/* Vocab x hidden weight matrix for logits (embed when tied). */
+const float *ds4_model_lm_matrix(const Ds4ModelWeights *weights);
+
+void ds4_model_weights_tie_lm_head(Ds4ModelWeights *weights);
 
 size_t ds4_model_scratch_bytes(const DeepSeekV4Config *cfg, int T);
 

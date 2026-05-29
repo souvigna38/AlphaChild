@@ -17,6 +17,7 @@
  */
 
 #include "deepseek_v4_config.h"
+#include "v4_model.h"
 #include "hash_moe.h"
 #include "mhc.h"
 #include "rmsnorm.h"
@@ -643,7 +644,7 @@ static int run_train_4layer(int steps, float lr, const char *data_path) {
     return 0;
 }
 
-static int run_train_e2e(int steps, float lr, const char *data_path) {
+static int run_train_e2e(int steps, float lr, const char *data_path, int log_every) {
     setvbuf(stdout, NULL, _IONBF, 0);
     DeepSeekV4Config cfg;
     ds4_config_init_train_4layer(&cfg);
@@ -669,7 +670,8 @@ static int run_train_e2e(int steps, float lr, const char *data_path) {
 
     Ds4ModelWeights mw = {0};
     mw.embed = (float *)calloc((size_t)V * (size_t)C, sizeof(float));
-    mw.lm_head = (float *)calloc((size_t)V * (size_t)C, sizeof(float));
+    mw.lm_head = NULL;
+    mw.lm_head_tied = 0;
     mw.final_norm = (float *)calloc((size_t)C, sizeof(float));
     mw.final_norm[0] = 1.0f;
     mw.hc_head_fn = (float *)calloc((size_t)hc * (size_t)hc * (size_t)C, sizeof(float));
@@ -682,8 +684,8 @@ static int run_train_e2e(int steps, float lr, const char *data_path) {
     for (size_t i = 0; i < (size_t)V * (size_t)C; i++) {
         seed = seed * 1103515245u + 12345u;
         mw.embed[i] = 0.002f * (float)((int)(seed % 1000) - 500);
-        mw.lm_head[i] = mw.embed[i];
     }
+    ds4_model_weights_tie_lm_head(&mw);
 
     int *ids = (int *)malloc((size_t)T * sizeof(int));
     int *targets = (int *)malloc((size_t)T * sizeof(int));
@@ -699,7 +701,11 @@ static int run_train_e2e(int steps, float lr, const char *data_path) {
     Ds4AdamW opt;
     ds4_adamw_init(&opt, ngrad, lr, 0.0f);
 
-    printf("\n--- Phase 14: train-e2e (4-layer + lm_head/final_norm/hc_head AdamW) ---\n");
+    if (log_every < 1) {
+        log_every = 1;
+    }
+    printf("\n--- train-e2e (4-layer AdamW, tied embed/lm_head) ---\n");
+    printf("  tip (Mac): ./bin/train_deepseek_v4_tiny -train-e2e 200 -log-every 10 -data ../data/tiny_shakespeare.txt\n");
     for (int s = 0; s < steps; s++) {
         if (use_data) {
             dsv2_get_batch(ds.tokens, ds.n_tokens, ids, targets, 1, T, &seed);
@@ -716,12 +722,12 @@ static int run_train_e2e(int steps, float lr, const char *data_path) {
             }
         }
         float loss = ds4_model_train_step_e2e(&mw, &cfg, ids, targets, T, &opt, grad, sa, sb, model_scratch, layer_cache, logits, tok);
-        if (s == 0 || (s + 1) % 10 == 0 || s == steps - 1) {
+        if (s == 0 || (s + 1) % log_every == 0 || s == steps - 1) {
             printf("  step %4d  loss %.4f\n", s + 1, loss);
         }
     }
 
-    printf("Phase 14 train-e2e OK\n");
+    printf("train-e2e OK\n");
     if (use_data && ds.n_tokens > 500000) {
         _exit(0);
     }
@@ -745,7 +751,7 @@ static int run_train_e2e(int steps, float lr, const char *data_path) {
 static void usage(const char *prog) {
     fprintf(
         stderr,
-        "Usage: %s [smoke] | -train-head STEPS | -train-adam STEPS | -train-1layer STEPS | -train-full STEPS | -train-4layer STEPS | -train-e2e STEPS [-lr LR] [-data path.txt]\n",
+        "Usage: %s [smoke] | -train-head STEPS | -train-adam STEPS | -train-1layer STEPS | -train-full STEPS | -train-4layer STEPS | -train-e2e STEPS [-lr LR] [-log-every N] [-data path.txt]\n",
         prog);
 }
 
@@ -756,6 +762,7 @@ int main(int argc, char **argv) {
     int train_full_steps = 0;
     int train_4layer_steps = 0;
     int train_e2e_steps = 0;
+    int log_every = 10;
     float lr = 0.05f;
     int lr_from_argv = 0;
     const char *data_path = "../data/tiny_shakespeare.txt";
@@ -778,6 +785,8 @@ int main(int argc, char **argv) {
             lr_from_argv = 1;
         } else if (strcmp(argv[i], "-data") == 0 && i + 1 < argc) {
             data_path = argv[++i];
+        } else if (strcmp(argv[i], "-log-every") == 0 && i + 1 < argc) {
+            log_every = atoi(argv[++i]);
         } else if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
             usage(argv[0]);
             return 0;
@@ -812,10 +821,10 @@ int main(int argc, char **argv) {
         if (!lr_from_argv) {
             lr = 0.01f;
         }
-        return run_train_e2e(train_e2e_steps, lr, data_path);
+        return run_train_e2e(train_e2e_steps, lr, data_path, log_every);
     }
 
-    printf("=== DeepSeek-V4 C port (phases 0–19) ===\n");
+    printf("=== DeepSeek-V4 C port (priorities 1–5 / phases 0–20) ===\n");
     printf("Reference: vendor/nano-deepseek-v4/nano_deepseek_v4/modeling.py\n");
     printf("Notebook:  ../18.DeepSeekV4Path.ipynb\n\n");
 

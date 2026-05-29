@@ -4,6 +4,7 @@
  */
 #include "moe.h"
 
+#include "ds4_cuda.h"
 #include "hash_moe.h"
 #include "swiglu.h"
 #include "v4_ops.h"
@@ -75,7 +76,7 @@ static void moe_routed_token(
         int e = topi[j];
         const float *egu = expert_gate_up + (size_t)e * gu_stride;
         const float *ed = expert_down + (size_t)e * dn_stride;
-        ds4_swiglu_forward(tmp, x, C, I, egu, ed, cfg->swiglu_limit);
+        ds4_swiglu_forward_cuda(tmp, x, C, I, egu, ed, cfg->swiglu_limit);
         for (int c = 0; c < C; c++) {
             out[c] += topw[j] * tmp[c];
         }

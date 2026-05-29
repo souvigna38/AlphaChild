@@ -1,8 +1,12 @@
 #include "v4_parity.h"
 
 #include "hash_moe.h"
+#include "moe.h"
+#include "v4_attention.h"
+#include "v4_layer.h"
 #include "v4_model.h"
 
+#include <math.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -149,6 +153,70 @@ void ds4_parity_fill_model(Ds4ModelWeights *mw, const DeepSeekV4Config *cfg, uns
     }
 }
 
+float ds4_parity_stream_checksum(const float *streams, int T, int hc_mult, int hidden) {
+    float sum = 0.0f;
+    size_t n = (size_t)T * (size_t)hc_mult * (size_t)hidden;
+    for (size_t i = 0; i < n; i++) {
+        sum += fabsf(streams[i]);
+    }
+    return sum;
+}
+
+void ds4_parity_forward_layer_checksums(
+    float *checksums,
+    int n_layers_out,
+    const int *input_ids,
+    int T,
+    const DeepSeekV4Config *cfg,
+    Ds4ModelWeights *mw) {
+    const int C = cfg->hidden_size;
+    const int hc = cfg->hc_mult;
+    const int nL = cfg->num_hidden_layers;
+    if (!checksums || n_layers_out < nL) {
+        return;
+    }
+
+    size_t attn_n = ds4_attention_scratch_bytes(cfg, T) / sizeof(float);
+    size_t moe_n = ds4_moe_scratch_bytes(cfg) / sizeof(float);
+    size_t layer_base = ds4_layer_scratch_bytes(cfg, T) / sizeof(float);
+
+    float *sa = (float *)malloc((size_t)T * (size_t)hc * (size_t)C * sizeof(float));
+    float *sb = (float *)malloc((size_t)T * (size_t)hc * (size_t)C * sizeof(float));
+    float *scratch = (float *)malloc(ds4_model_scratch_bytes(cfg, T));
+    if (!sa || !sb || !scratch) {
+        free(scratch);
+        free(sb);
+        free(sa);
+        return;
+    }
+
+    float *attn_scratch = scratch;
+    float *moe_scratch = scratch + attn_n;
+    float *layer_work = scratch + attn_n + moe_n;
+
+    for (int t = 0; t < T; t++) {
+        const float *emb = mw->embed + (size_t)input_ids[t] * (size_t)C;
+        for (int i = 0; i < hc; i++) {
+            memcpy(sa + ((size_t)t * (size_t)hc + (size_t)i) * (size_t)C, emb, (size_t)C * sizeof(float));
+        }
+    }
+
+    float *cur = sa;
+    float *nxt = sb;
+    for (int L = 0; L < nL; L++) {
+        ds4_decoder_layer_forward(
+            nxt, cur, input_ids, T, L, cfg, &mw->layers[L], attn_scratch, moe_scratch, layer_work);
+        checksums[L] = ds4_parity_stream_checksum(nxt, T, hc, C);
+        float *tmp = cur;
+        cur = nxt;
+        nxt = tmp;
+    }
+
+    free(scratch);
+    free(sb);
+    free(sa);
+}
+
 void ds4_parity_forward_logits(
     float *logits,
     const int *input_ids,
@@ -216,7 +284,9 @@ void ds4_parity_free_model(Ds4ModelWeights *mw, const DeepSeekV4Config *cfg) {
         mw->layers = NULL;
     }
     free(mw->embed);
-    free(mw->lm_head);
+    if (!mw->lm_head_tied) {
+        free(mw->lm_head);
+    }
     free(mw->final_norm);
     free(mw->hc_head_fn);
     free(mw->hc_head_base);

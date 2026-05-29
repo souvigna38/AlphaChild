@@ -1,12 +1,12 @@
 #include "v4_train.h"
 
 #include "mhc.h"
+#include "v4_model.h"
 #include "rmsnorm.h"
 #include "moe.h"
 #include "v4_attention.h"
 #include "v4_layer.h"
 #include "v4_layer_train.h"
-#include "v4_model.h"
 #include "v4_ops.h"
 
 #include <stddef.h>
@@ -561,7 +561,9 @@ static void adam_apply_e2e_head(Ds4AdamW *opt, size_t *soff, Ds4ModelWeights *w,
     adam_group(opt, soff, w->hc_head_fn, hg.hc_head_fn, (size_t)hc * (size_t)hc * (size_t)C);
     adam_group(opt, soff, w->hc_head_base, hg.hc_head_base, (size_t)hc);
     adam_group(opt, soff, w->hc_head_scale, hg.hc_head_scale, 3);
-    adam_group(opt, soff, w->lm_head, hg.lm_head, (size_t)V * (size_t)C);
+    if (!w->lm_head_tied) {
+        adam_group(opt, soff, w->lm_head, hg.lm_head, (size_t)V * (size_t)C);
+    }
 }
 
 float ds4_model_train_step_e2e(
@@ -666,7 +668,9 @@ float ds4_model_train_step_e2e(
         }
         float dnorm_h[DS4_TRAIN_MAX_C];
         memset(dnorm_h, 0, (size_t)C * sizeof(float));
-        ds4_linear_backward(dnorm_h, hg.lm_head, dlog, norm_h + (size_t)t * (size_t)C, weights->lm_head, V, C);
+        float *g_lm_w = weights->lm_head_tied ? grad_buf : hg.lm_head;
+        ds4_linear_backward(
+            dnorm_h, g_lm_w, dlog, norm_h + (size_t)t * (size_t)C, ds4_model_lm_matrix(weights), V, C);
         float dpre[DS4_TRAIN_MAX_C];
         ds4_rmsnorm_backward(
             dpre,

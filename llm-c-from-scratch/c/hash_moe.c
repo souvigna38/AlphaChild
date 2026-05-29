@@ -4,6 +4,7 @@
  */
 #include "hash_moe.h"
 
+#include "ds4_cuda.h"
 #include "swiglu.h"
 
 #include <math.h>
@@ -86,7 +87,7 @@ void ds4_hash_moe_forward_token(
         int e = tid2eid[(size_t)token_id * (size_t)k + (size_t)j];
         const float *egu = expert_gate_up + (size_t)e * gate_up_stride;
         const float *ed = expert_down + (size_t)e * down_stride;
-        ds4_swiglu_forward(tmp, x, C, I, egu, ed, 10.0f);
+        ds4_swiglu_forward_cuda(tmp, x, C, I, egu, ed, cfg->swiglu_limit);
         for (int c = 0; c < C; c++) {
             out[c] += weights[j] * tmp[c];
         }
@@ -95,7 +96,7 @@ void ds4_hash_moe_forward_token(
     for (int s = 0; s < S; s++) {
         const float *sgu = shared_gate_up + (size_t)s * gate_up_stride;
         const float *sd = shared_down + (size_t)s * down_stride;
-        ds4_swiglu_forward(tmp, x, C, I, sgu, sd, 10.0f);
+        ds4_swiglu_forward_cuda(tmp, x, C, I, sgu, sd, cfg->swiglu_limit);
         for (int c = 0; c < C; c++) {
             out[c] += tmp[c];
         }

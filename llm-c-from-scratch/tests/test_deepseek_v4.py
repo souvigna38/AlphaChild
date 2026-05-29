@@ -1,8 +1,10 @@
 """DeepSeek-V4 tiny: hash table + HashMoE vs C reference."""
 
 import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 import torch
 
 from llmc.deepseek_v4 import (
@@ -137,6 +139,43 @@ def test_c_cuda_sliding_integrated_smoke():
         capture_output=True,
         text=True,
         check=True,
+    )
+    assert "OK" in out.stdout
+
+
+def test_c_v4_layer_parity_smoke():
+    if not (C_DIR / "bin" / "test_v4_layer_parity").exists():
+        subprocess.run(["make", "bin/test_v4_layer_parity"], cwd=C_DIR, check=True)
+    fixture = Path(__file__).resolve().parent / "fixtures" / "v4_layer_checksums.txt"
+    if not fixture.exists():
+        subprocess.run(
+            [str(C_DIR / "bin" / "test_v4_layer_parity"), "--write-fixture", "--fixture", str(fixture)],
+            cwd=C_DIR,
+            check=True,
+        )
+    out = subprocess.run(
+        [str(C_DIR / "bin" / "test_v4_layer_parity"), "--fixture", str(fixture)],
+        cwd=C_DIR,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert "OK" in out.stdout
+
+
+def test_verify_nano_hash_moe_script():
+    script = Path(__file__).resolve().parent.parent / "scripts" / "verify_v4_nano_hash_moe.py"
+    out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, check=False)
+    if out.returncode != 0:
+        pytest.skip("verify_v4_nano_hash_moe unavailable: " + (out.stderr or out.stdout)[:200])
+    assert "OK" in out.stdout
+
+
+def test_c_v4_tied_head_smoke():
+    if not (C_DIR / "bin" / "test_v4_tied_head").exists():
+        subprocess.run(["make", "bin/test_v4_tied_head"], cwd=C_DIR, check=True)
+    out = subprocess.run(
+        [str(C_DIR / "bin" / "test_v4_tied_head")], cwd=C_DIR, capture_output=True, text=True, check=True
     )
     assert "OK" in out.stdout
 

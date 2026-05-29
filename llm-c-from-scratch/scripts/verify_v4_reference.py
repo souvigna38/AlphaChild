@@ -40,6 +40,10 @@ def main() -> None:
     print("  layer_types:", cfg.layer_types)
     print("  mlp_layer_types:", cfg.mlp_layer_types)
     print("  For C golden parity: python3 scripts/verify_v4_parity.py")
+    print("  For hash_moe C vs llmc: python3 scripts/verify_v4_nano_hash_moe.py")
+    with torch.no_grad():
+        logits_flat = logits[0, 0].float()
+        print("  logits[0,0,:4] =", [float(logits_flat[i]) for i in range(min(4, logits_flat.numel()))])
 
 
 if __name__ == "__main__":

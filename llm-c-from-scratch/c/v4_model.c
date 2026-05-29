@@ -10,6 +10,15 @@
 #include <stddef.h>
 #include <string.h>
 
+const float *ds4_model_lm_matrix(const Ds4ModelWeights *weights) {
+    return weights->lm_head_tied ? weights->embed : weights->lm_head;
+}
+
+void ds4_model_weights_tie_lm_head(Ds4ModelWeights *weights) {
+    weights->lm_head = weights->embed;
+    weights->lm_head_tied = 1;
+}
+
 size_t ds4_model_scratch_bytes(const DeepSeekV4Config *cfg, int T) {
     return ds4_layer_scratch_bytes(cfg, T) + (size_t)T * (size_t)cfg->hidden_size * 2 * sizeof(float);
 }
@@ -87,8 +96,9 @@ void ds4_model_forward(
     for (int t = 0; t < T; t++) {
         const float *h = norm_h + (size_t)t * (size_t)C;
         float *log = logits + (size_t)t * (size_t)V;
+        const float *W = ds4_model_lm_matrix(weights);
         for (int v = 0; v < V; v++) {
-            log[v] = ds4_dot(h, weights->lm_head + (size_t)v * (size_t)C, C);
+            log[v] = ds4_dot(h, W + (size_t)v * (size_t)C, C);
         }
     }
 }

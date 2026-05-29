@@ -3,6 +3,7 @@
 #include "hash_moe.h"
 #include "v4_layer_train.h"
 #include "v4_model.h"
+#include "v4_model.h"
 #include "v4_train.h"
 
 #include <stdio.h>
@@ -86,7 +87,8 @@ int main(void) {
 
     Ds4ModelWeights mw = {0};
     mw.embed = (float *)calloc((size_t)V * (size_t)C, sizeof(float));
-    mw.lm_head = (float *)calloc((size_t)V * (size_t)C, sizeof(float));
+    mw.lm_head = NULL;
+    mw.lm_head_tied = 0;
     mw.final_norm = (float *)calloc((size_t)C, sizeof(float));
     mw.final_norm[0] = 1.0f;
     mw.hc_head_fn = (float *)calloc((size_t)hc * (size_t)hc * (size_t)C, sizeof(float));
@@ -99,8 +101,8 @@ int main(void) {
     for (size_t i = 0; i < (size_t)V * (size_t)C; i++) {
         seed = seed * 1103515245u + 12345u;
         mw.embed[i] = 0.002f * (float)((int)(seed % 1000) - 500);
-        mw.lm_head[i] = mw.embed[i];
     }
+    ds4_model_weights_tie_lm_head(&mw);
 
     int ids[8];
     int targets[8];
@@ -136,11 +138,17 @@ int main(void) {
     Ds4E2eHeadGrads hg;
     ds4_e2e_head_grad_ptrs(&hg, grad, &cfg);
     float lm_sum = 0.0f;
-    for (size_t i = 0; i < (size_t)V * (size_t)C; i++) {
-        lm_sum += hg.lm_head[i] * hg.lm_head[i];
+    if (mw.lm_head_tied) {
+        for (size_t i = 0; i < (size_t)V * (size_t)C; i++) {
+            lm_sum += grad[i] * grad[i];
+        }
+    } else {
+        for (size_t i = 0; i < (size_t)V * (size_t)C; i++) {
+            lm_sum += hg.lm_head[i] * hg.lm_head[i];
+        }
     }
     if (lm_sum <= 0.0f) {
-        fprintf(stderr, "expected lm_head grad buffer used in e2e step\n");
+        fprintf(stderr, "expected embed/lm_head grad in e2e step\n");
         return 1;
     }
     (void)loss2;

@@ -27,6 +27,9 @@ def main() -> None:
     cfg_script = ROOT / "scripts" / "verify_v4_config.py"
     subprocess.run([sys.executable, str(cfg_script)], check=True)
 
+    layer_script = ROOT / "scripts" / "verify_v4_layer_parity.py"
+    subprocess.run([sys.executable, str(layer_script)], check=True)
+
     ref = ROOT / "scripts" / "verify_v4_reference.py"
     if ref.exists():
         try:
