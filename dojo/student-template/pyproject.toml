@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dojo-student-workspace"
+version = "0.1.0"
+description = "Student workspace for Agentic Dojo (curriculum via pip)"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "jupyterlab",
+    "ipykernel",
+]
+# Pin curriculum ref when instructor tags a release (course-2026.1)
+curriculum = [
+    "alphazero-from-scratch[dojo] @ git+https://github.com/souvigna38/AlphaChild.git@cursor/v4-sliding-attn-64d3",
+]
+
+[tool.setuptools]
+packages = []
