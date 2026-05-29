@@ -21,7 +21,7 @@ pip install -e ".[dev]"
 4. Install curriculum (pin updates via tag):
 
 ```bash
-pip install "alphachild-dojo @ git+https://github.com/souvigna38/AlphaChild.git@cursor/v4-sliding-attn-64d3"
+pip install "alphazero-from-scratch[dojo] @ git+https://github.com/souvigna38/AlphaChild.git@course-2026.1"
 ```
 
 Or split installs:

@@ -68,3 +68,39 @@ def completed_lessons(user_id: int) -> set[str]:
             (str(user_id),),
         ).fetchall()
     return {r[0] for r in rows}
+
+
+def _init_ta_rate(conn: sqlite3.Connection) -> None:
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS ta_rate (
+            user_id TEXT NOT NULL,
+            ts REAL NOT NULL
+        )
+        """
+    )
+
+
+def ta_rate_allow(user_id: int, max_per_hour: int) -> bool:
+    import time
+
+    cutoff = time.time() - 3600
+    with connect() as conn:
+        _init_ta_rate(conn)
+        count = conn.execute(
+            "SELECT COUNT(*) FROM ta_rate WHERE user_id = ? AND ts > ?",
+            (str(user_id), cutoff),
+        ).fetchone()[0]
+    return count < max_per_hour
+
+
+def ta_rate_record(user_id: int) -> None:
+    import time
+
+    with connect() as conn:
+        _init_ta_rate(conn)
+        conn.execute(
+            "INSERT INTO ta_rate (user_id, ts) VALUES (?, ?)",
+            (str(user_id), time.time()),
+        )
+        conn.commit()

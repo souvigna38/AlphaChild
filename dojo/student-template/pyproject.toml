@@ -17,7 +17,7 @@ dev = [
 ]
 # Pin curriculum ref when instructor tags a release (course-2026.1)
 curriculum = [
-    "alphazero-from-scratch[dojo] @ git+https://github.com/souvigna38/AlphaChild.git@cursor/v4-sliding-attn-64d3",
+    "alphazero-from-scratch[dojo] @ git+https://github.com/souvigna38/AlphaChild.git@course-2026.1",
 ]
 
 [tool.setuptools]

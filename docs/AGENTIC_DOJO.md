@@ -14,6 +14,32 @@ This is **not** a manual “react ✅ for roles” community. One custom bot (`g
 
 **Do not install** Carl-bot, MEE6, or Zira for roles.
 
+## Season 1 launch (`course-2026.1`)
+
+Students pin the immutable curriculum tag:
+
+```bash
+pip install "alphazero-from-scratch[dojo] @ git+https://github.com/souvigna38/AlphaChild.git@course-2026.1"
+```
+
+**Day-1 gates** (build more incrementally): onboarding assessment, hardware profiler, `C1-L01`–`L03`, `C2-L01`/`L04`/`L12`. See `dojo/lessons.yaml`.
+
+## Sparring Partner (Socratic TA)
+
+After White Belt, students `@mention` the bot in `#ask-track-1`, `#ask-track-2`, or any channel matching `DOJO_TA_CHANNEL_PREFIXES`.
+
+- Powered by **OpenClaw** or any OpenAI-compatible endpoint (`OPENCLAW_API_URL`).
+- System prompt: Socratic only — no full solutions, no proof forgery.
+- Rate limit: `DOJO_TA_MAX_REQUESTS_PER_HOUR` (default 12).
+- Post-filter blocks large code dumps and `PASS-*` leaks.
+
+Run OpenClaw on the bot host, then:
+
+```bash
+OPENCLAW_API_URL=http://127.0.0.1:18789/v1/chat/completions
+dojo-gatekeeper
+```
+
 ## Bot setup (instructor)
 
 1. Create Discord application → Bot → enable **Message Content Intent**.

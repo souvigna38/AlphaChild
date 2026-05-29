@@ -15,6 +15,14 @@ from dojo.config import DojoConfig
 from dojo.hardware import tier_allows
 from dojo.lessons import get_lesson, prerequisite_met
 from dojo.proof import parse_hardware_line, parse_proof_line, verify_hardware_proof, verify_proof
+from dojo.sparring_partner import (
+    check_rate_limit,
+    chunk_for_discord,
+    extract_question,
+    load_ta_config,
+    record_rate_limit,
+    socratic_reply,
+)
 from dojo.store import (
     completed_lessons,
     get_hardware_tier,
@@ -44,6 +52,7 @@ class GatekeeperBot(commands.Bot):
         super().__init__(command_prefix="!", intents=intents)
         self.cfg = cfg
         self.assessments: dict[int, object] = {}
+        self.ta_cfg = load_ta_config()
 
     async def _find_role(self, guild: discord.Guild, name: str) -> discord.Role | None:
         for role in guild.roles:
@@ -194,7 +203,58 @@ class GatekeeperBot(commands.Bot):
         ):
             return
 
+        if await self._handle_sparring_partner(message):
+            return
+
         await self._handle_lesson_proof(message)
+
+    async def _member_has_white_belt(self, member: discord.Member) -> bool:
+        role = await self._find_role(member.guild, self.cfg.role_white_belt)
+        return role is not None and role in member.roles
+
+    async def _handle_sparring_partner(self, message: discord.Message) -> bool:
+        """Socratic TA when @mentioned in help channels (Season 1 — Sparring Partner)."""
+        if not self.ta_cfg.enabled or self.user is None:
+            return False
+        if not isinstance(message.author, discord.Member):
+            return False
+        if not self.cfg.ta_allowed_in_channel(message.channel.id, message.channel.name or ""):
+            return False
+
+        question = extract_question(message.content or "", self.user.id)
+        if question is None:
+            return False
+
+        if not await self._member_has_white_belt(message.author):
+            await message.reply("Pass `!start_assessment` first to unlock the Sparring Partner.")
+            return True
+
+        if not check_rate_limit(message.author.id, self.ta_cfg.max_requests_per_hour):
+            await message.reply(
+                f"Rate limit: {self.ta_cfg.max_requests_per_hour} questions/hour. "
+                "Try again later or narrow your question."
+            )
+            return True
+
+        async with message.channel.typing():
+            try:
+                record_rate_limit(message.author.id)
+                reply = await socratic_reply(
+                    self.ta_cfg,
+                    question,
+                    channel_name=message.channel.name or "",
+                )
+            except Exception:
+                log.exception("Sparring Partner API failure")
+                await message.reply(
+                    "Sparring Partner is offline. Check `OPENCLAW_API_URL` on the bot host, "
+                    "or post in #dojo-debugging for a human."
+                )
+                return True
+
+        for chunk in chunk_for_discord(reply):
+            await message.reply(chunk, mention_author=False)
+        return True
 
     @commands.command(name="start_assessment")
     async def start_assessment(self, ctx: commands.Context) -> None:
@@ -243,7 +303,8 @@ class GatekeeperBot(commands.Bot):
     async def dojo_help(self, ctx: commands.Context) -> None:
         await ctx.reply(
             "`!start_assessment` · `!track c1|c2|c3` · "
-            "`dojo-profile` → #verify-setup · `dojo-grade` → PASS-* in lesson channels"
+            "`dojo-profile` → #verify-setup · `dojo-grade` → PASS-* in lesson channels · "
+            "@mention me in #ask-* for Socratic help (no full solutions)"
         )
 
 
