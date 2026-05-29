@@ -4,6 +4,18 @@ Operational sequence: staging Discord → live Dojo. The codebase is locked at *
 
 ---
 
+## Discord automation (you run locally)
+
+The cloud agent **cannot** log into Discord. Run once:
+
+```bash
+python dojo/scripts/discord_provision.py
+```
+
+See [`DISCORD_SETUP.md`](DISCORD_SETUP.md).
+
+---
+
 ## Pre-flight (you, 30 minutes before doors open)
 
 ```bash
