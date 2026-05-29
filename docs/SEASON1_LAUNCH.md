@@ -1,17 +1,12 @@
 # Season 1 — Opening the Dojo
 
+**Cohort commander playbook (roles, Zoom, Discord pins):** [`SEASON1_COHORT_COMMANDER.md`](SEASON1_COHORT_COMMANDER.md)
+
 Checklist before inviting White Belts.
 
-## 1. Merge and tag curriculum
+## 1. Curriculum tag
 
-```bash
-git checkout main   # after merging PR #15 (Agentic Dojo)
-git pull
-git tag -a course-2026.1 -m "Season 1 immutable curriculum (Agentic Dojo)"
-git push origin course-2026.1
-```
-
-Students **only** install `@course-2026.1`, never moving branches.
+**`course-2026.1`** is published on GitHub. Students **only** install that tag — never moving branches.
 
 ## 2. Discord server
 
@@ -32,9 +27,10 @@ Students **only** install `@course-2026.1`, never moving branches.
 
 ```bash
 pip install -e ".[dojo]"
-# Terminal A: OpenClaw gateway (your usual start command)
-# Terminal B:
 set -a && source dojo/.env && set +a
+./dojo/scripts/launch_check.sh
+# Terminal A: OpenClaw gateway
+# Terminal B:
 dojo-gatekeeper
 ```
 
@@ -46,16 +42,9 @@ dojo-gatekeeper
 4. `dojo-grade --lesson C2-L01` → post `PASS-*`
 5. `@DojoBot why would MLA shrink KV cache?` in `#ask-track-2` → Socratic reply (no code dump)
 
-## 6. Student onboarding message (paste in #welcome)
+## 6. Discord pins
 
-```
-Welcome to Season 1.
-1. Fork the student template (link in pins).
-2. pip install @course-2026.1
-3. #waiting-room → !start_assessment
-4. dojo-profile → #verify-setup
-5. Stuck at 2am? @DojoBot in #ask-track-* — hints only, never full solutions.
-```
+Copy from [`dojo/discord-pins/`](../dojo/discord-pins/) into `#rules`, `#setup-guide`, `#welcome`, `#waiting-room`, `#choose-your-track`.
 
 ## Deferred (post–Season 1)
 

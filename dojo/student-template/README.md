@@ -24,12 +24,6 @@ pip install -e ".[dev]"
 pip install "alphazero-from-scratch[dojo] @ git+https://github.com/souvigna38/AlphaChild.git@course-2026.1"
 ```
 
-Or split installs:
-
-```bash
-pip install "git+https://github.com/souvigna38/AlphaChild.git@cursor/v4-sliding-attn-64d3#egg=alphachild-dojo"
-```
-
 5. Gate assessment on Discord: `!start_assessment` in #waiting-room.
 
 6. Hardware:
@@ -56,7 +50,7 @@ Paste the `PASS-*` line in the lesson channel — the bot assigns your role auto
 ## Upgrading curriculum
 
 ```bash
-pip install --upgrade "alphachild-dojo @ git+https://github.com/souvigna38/AlphaChild.git@course-2026.1"
+pip install --upgrade "alphazero-from-scratch[dojo] @ git+https://github.com/souvigna38/AlphaChild.git@course-2026.1"
 ```
 
 No merge conflicts — your notebooks stay untouched.
