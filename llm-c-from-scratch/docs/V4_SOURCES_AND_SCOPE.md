@@ -57,6 +57,7 @@ There is **no** official `deepseek-ai/DeepSeek-V4` training repo in C/CUDA (unli
 | 18 | `cuda/ds4_core_attention.cu`, `test_cuda_core_attention` | Sliding masked attention core (QK^T + sink) CUDA |
 | 19 | CUDA dispatch in `sliding_attn.c`, `v4_attention.c`, `ds4_cuda.c` in `V4_CORE` | Wire RMSNorm + core_attention into sliding/HCA/CSA forward |
 | 20 | Priorities 1–5 (Mac-friendly) | Layer checksum parity, train-e2e logging, SwiGLU cuda in MoE, tied embed/lm_head, llmc hash_moe check |
+| 21 | `verify_v4_sliding_attn.py`, `sliding_attn_fill_local_mask` | C sliding attention forward matches nano (CPU/MPS) |
 
 Educational numbering mirrors notebooks → **`c/01_*.c` …** (optional rename as files land).
 
@@ -69,6 +70,7 @@ cd llm-c-from-scratch/c && make test_v4
 cd llm-c-from-scratch && pytest tests/test_deepseek_v4.py -q
 python3 scripts/verify_v4_parity.py
 python3 scripts/verify_v4_nano_hash_moe.py   # C hash_moe vs llmc (PyTorch CPU/MPS)
+python3 scripts/verify_v4_sliding_attn.py  # C sliding_attn vs nano DeepSeekV4Attention
 ./c/bin/train_deepseek_v4_tiny -train-e2e 50 -log-every 5 -data data/tiny_shakespeare.txt
 ```
 

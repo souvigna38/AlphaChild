@@ -192,12 +192,8 @@ void ds4_attention_forward(
     }
 
     int mask[DS4_MAX_T * (DS4_MAX_T + DS4_MAX_COMP)];
+    ds4_sliding_fill_local_mask(mask, T, Tk, cfg->sliding_window);
     for (int tq = 0; tq < T; tq++) {
-        for (int tk = 0; tk < T; tk++) {
-            int causal = (tk <= tq);
-            int in_window = (tk >= tq - cfg->sliding_window + 1);
-            mask[(size_t)tq * (size_t)Tk + (size_t)tk] = causal && in_window;
-        }
         for (int k = 0; k < n_comp; k++) {
             int ok = (comp_end[k] <= tq);
             if (attn_type == DS4_ATTN_CSA) {

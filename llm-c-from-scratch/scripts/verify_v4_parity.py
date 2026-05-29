@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 C_DIR = ROOT / "c"
+VENDOR = ROOT / "vendor" / "nano-deepseek-v4"
 BIN = C_DIR / "bin" / "test_v4_parity"
 FIXTURE = ROOT / "tests" / "fixtures" / "v4_parity_logits.txt"
 
@@ -29,6 +30,12 @@ def main() -> None:
 
     layer_script = ROOT / "scripts" / "verify_v4_layer_parity.py"
     subprocess.run([sys.executable, str(layer_script)], check=True)
+
+    sliding_script = ROOT / "scripts" / "verify_v4_sliding_attn.py"
+    if sliding_script.exists() and VENDOR.exists():
+        subprocess.run([sys.executable, str(sliding_script)], check=True)
+    elif not VENDOR.exists():
+        print("(verify_v4_sliding_attn skipped: vendor missing)", file=sys.stderr)
 
     ref = ROOT / "scripts" / "verify_v4_reference.py"
     if ref.exists():

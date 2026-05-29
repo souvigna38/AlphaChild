@@ -19,6 +19,9 @@
 
 size_t ds4_sliding_attn_scratch_bytes(const DeepSeekV4Config *cfg, int T);
 
+/* Fill local sliding mask rows: mask[tq*Tk_cols + tk] for tq,tk in [0,T). */
+void ds4_sliding_fill_local_mask(int *mask, int T, int Tk_cols, int sliding_window);
+
 void ds4_sliding_attn_forward(
     float *out,
     const float *x,

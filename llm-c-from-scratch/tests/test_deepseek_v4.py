@@ -163,6 +163,16 @@ def test_c_v4_layer_parity_smoke():
     assert "OK" in out.stdout
 
 
+def test_verify_sliding_attn_nano_script():
+    if not (ROOT / "vendor" / "nano-deepseek-v4").exists():
+        pytest.skip("vendor/nano-deepseek-v4 not installed")
+    script = ROOT / "scripts" / "verify_v4_sliding_attn.py"
+    out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, check=False)
+    if out.returncode != 0:
+        pytest.skip("verify_v4_sliding_attn failed: " + (out.stderr or out.stdout)[:200])
+    assert "OK" in out.stdout
+
+
 def test_verify_nano_hash_moe_script():
     script = Path(__file__).resolve().parent.parent / "scripts" / "verify_v4_nano_hash_moe.py"
     out = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, check=False)
