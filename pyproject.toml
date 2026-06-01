@@ -18,6 +18,7 @@ dependencies = [
 dojo-grade = "dojo.grade:main"
 dojo-profile = "dojo.hardware:main"
 dojo-gatekeeper = "dojo.gatekeeper:main"
+dojo-setup = "dojo.setup_wizard:main"
 
 [project.optional-dependencies]
 gym = [

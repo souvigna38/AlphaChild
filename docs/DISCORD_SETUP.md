@@ -1,75 +1,89 @@
-# Discord setup — what the agent can and cannot do
+# Discord setup for beginners
 
-## Can the cloud agent set up Discord for you?
+**The cloud agent cannot log into Discord.** Run this on your Mac — one wizard does almost everything.
 
-**No.** This environment does not have:
+## Fastest path (recommended)
 
-- Your Discord login
-- Your server admin access
-- Your bot token or application secrets
+```bash
+git clone https://github.com/souvigna38/AlphaChild.git
+cd AlphaChild
+git checkout cursor/agentic-dojo-64d3
 
-Never paste `DISCORD_BOT_TOKEN` into Cursor chat or a public channel.
+pip install -e ".[dojo]"
+dojo-setup
+```
 
-## What you can run in ~15 minutes
+Or:
 
-We ship a **provision script** that does the mechanical work once you create the bot.
+```bash
+bash dojo/scripts/setup.sh
+```
 
-### Step 1 — Create the bot (5 min, one-time)
+The wizard will:
 
-1. Open https://discord.com/developers/applications → **New Application** → name it `Agentic Dojo`.
-2. **Bot** → **Reset Token** → copy token → `dojo/.env` as `DISCORD_BOT_TOKEN`.
-3. Copy **Application ID** → `DISCORD_APPLICATION_ID` in `dojo/.env`.
-4. Enable **Message Content Intent** under Bot.
-5. **OAuth2 → URL Generator** → scope `bot`, permission **Administrator** (setup only) → open URL → add bot to your server.
-6. In Discord: **Server Settings → Widget** or right-click server → **Copy Server ID** → `DOJO_GUILD_ID`.
+1. Explain Discord in plain English (server, channels, roles, bot)
+2. Open the Developer Portal in your browser
+3. Ask you to paste **Bot Token**, **Application ID**, and **Server ID**
+4. Open the bot invite link
+5. Write `dojo/.env` (including auto-generated `DOJO_PROOF_SECRET`)
+6. Create all roles, channels, and pinned messages
+7. Save channel IDs into `dojo/.env` automatically
 
-### Step 2 — Run provisioner (2 min)
+**Time:** ~15 minutes if you are new to Discord.
+
+---
+
+## What you do manually (cannot be automated)
+
+| Step | Why |
+|------|-----|
+| Create a Discord account | Needs your identity |
+| Create a server (click +) | Your classroom |
+| Copy/paste 3 numbers from Discord | Token, App ID, Server ID |
+| Drag bot role above student roles | Discord UI only |
+| Assign yourself `@Staff` | So you see `#admin-logs` |
+| Run `dojo-gatekeeper` on your Mac | Bot must stay online on your machine |
+
+**Never paste your Bot Token in Cursor chat or any public channel.**
+
+---
+
+## After the wizard
 
 ```bash
 cd AlphaChild
-pip install -e ".[dojo]"
-cp dojo/.env.example dojo/.env
-# fill DISCORD_BOT_TOKEN, DOJO_GUILD_ID, DISCORD_APPLICATION_ID, DOJO_PROOF_SECRET
-
 set -a && source dojo/.env && set +a
-python dojo/scripts/discord_provision.py --dry-run
-python dojo/scripts/discord_provision.py
-```
-
-This creates:
-
-- Roles (`Verified`, `White Belt`, tracks, tiers, lesson milestones)
-- Categories and channels (`#rules`, `#waiting-room`, `#ask-track-*`, …)
-- Pinned messages from `dojo/discord-pins/`
-
-### Step 3 — Wire channel IDs (2 min)
-
-Developer Mode on → right-click channels → **Copy ID** → add to `dojo/.env`:
-
-```env
-DOJO_CHANNEL_WAITING_ROOM=...
-DOJO_CHANNEL_VERIFY_SETUP=...
-```
-
-### Step 4 — Start bot + OpenClaw (2 min)
-
-```bash
-./dojo/scripts/launch_check.sh
 dojo-gatekeeper
 ```
 
-### Step 5 — Manual checks (2 min)
+In Discord test:
 
-| Check | Action |
-|-------|--------|
-| Role order | `@DojoBot` **above** all roles it grants |
-| Staff | Assign yourself `@Staff` |
-| Re-invite bot | Optional: re-invite without Administrator after provision |
+- `#waiting-room` → `!start_assessment`
+- `#ask-track-2` → `@YourBotName explain MLA in one sentence`
 
-## Optional: I can help you live
+---
 
-If you run the provision script and paste **non-secret** output (e.g. error messages, role list screenshot description), we can debug together. Do **not** share tokens.
+## Troubleshooting
 
-## Full cohort launch
+| Problem | Fix |
+|---------|-----|
+| "Missing Access" | Re-invite bot with Administrator (wizard gives URL) |
+| Bot offline | Run `dojo-gatekeeper` in a terminal |
+| "Cannot message you" | User Settings → allow DMs from server members |
+| Provision failed | Bot must be in the server before running provision |
 
-After Discord exists: [`SEASON1_COHORT_COMMANDER.md`](SEASON1_COHORT_COMMANDER.md)
+---
+
+## What gets created
+
+**Roles:** Staff, Verified, White Belt, Track-*, Tier-*, C1-L01, C2-L12, …
+
+**Channels:** #rules, #welcome, #setup-guide, #waiting-room, #verify-setup, #ask-track-*, lesson channels
+
+**Pins:** Text from `dojo/discord-pins/`
+
+---
+
+## Next: open Season 1
+
+[`SEASON1_COHORT_COMMANDER.md`](SEASON1_COHORT_COMMANDER.md)

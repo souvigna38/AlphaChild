@@ -78,6 +78,26 @@ def invite_url(application_id: str, permissions: int = 8) -> str:
     )
 
 
+def _save_channel_ids(
+    waiting_id: int,
+    verify_id: int,
+) -> None:
+    try:
+        from dojo.env_file import merge_env
+
+        merge_env(
+            {
+                "DOJO_CHANNEL_WAITING_ROOM": str(waiting_id),
+                "DOJO_CHANNEL_VERIFY_SETUP": str(verify_id),
+            }
+        )
+        print(f"  ✓ saved channel IDs to dojo/.env")
+    except Exception as e:
+        print(f"  ! could not update dojo/.env: {e}")
+        print(f"    DOJO_CHANNEL_WAITING_ROOM={waiting_id}")
+        print(f"    DOJO_CHANNEL_VERIFY_SETUP={verify_id}")
+
+
 async def provision(dry_run: bool) -> None:
     token = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
     guild_id = int(os.environ.get("DOJO_GUILD_ID", "0"))
@@ -260,10 +280,12 @@ async def provision(dry_run: bool) -> None:
         await post_pin(ch_wait, _load_pin("waiting-room.md"))
         await post_pin(ch_track, _load_pin("choose-your-track.md"))
 
+        _save_channel_ids(ch_wait.id, ch_verify.id)
+
         print("\n✅ Provision complete.")
         print("Next:")
         print("  1. Confirm @DojoBot is above milestone roles in Server Settings → Roles")
-        print("  2. Copy channel IDs into dojo/.env (DOJO_CHANNEL_WAITING_ROOM, etc.)")
+        print("  2. Channel IDs saved to dojo/.env automatically")
         print("  3. ./dojo/scripts/launch_check.sh && dojo-gatekeeper")
         await client.close()
 
