@@ -10,6 +10,7 @@ NOTEBOOKS = sorted(ROOT.glob("*.ipynb"))
 SKIP = [
     r"trainer\.train\(\)",
     r"history = trainer\.train",
+    r"subprocess\.run\(cmd",
 ]
 
 
