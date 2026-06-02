@@ -1,0 +1,97 @@
+# Agentic Dojo lesson gates — pytest files ship in dojo/gates/ (always pip-installable).
+# Role names must exist on your Discord server (bot assigns by name).
+
+tracks:
+  c1_alpha:
+    - id: C1-L01
+      title: Tic-Tac-Toe
+      role: C1-L01
+      notebook: 1.TicTacToe.ipynb
+      gate: test_c1_l01_tictactoe.py
+      min_tier: lightweight
+    - id: C1-L02
+      title: MCTS
+      role: C1-L02
+      notebook: 2.MCTS.ipynb
+      gate: test_c1_l02_mcts.py
+      min_tier: lightweight
+    - id: C1-L03
+      title: Policy / value model
+      role: C1-L03
+      notebook: 3.Model.ipynb
+      gate: test_c1_l03_model.py
+      min_tier: lightweight
+    - id: C1-L08
+      title: Connect Four
+      role: C1-L08
+      notebook: 8.ConnectFour.ipynb
+      gate: test_c1_l08_connectfour.py
+      min_tier: lightweight
+    - id: C1-L11
+      title: MuZero model
+      role: C1-L11
+      notebook: 11.MuZeroModel.ipynb
+      gate: test_c1_l11_muzero.py
+      min_tier: standard
+    - id: C1-L14
+      title: MuZero Gym
+      role: C1-L14
+      notebook: 14.MuZeroGym.ipynb
+      gate: test_c1_l14_gym.py
+      min_tier: gpu
+
+  c2_llm:
+    - id: C2-L01
+      title: Tokens
+      role: C2-L01
+      notebook: 1.Tokens.ipynb
+      gate: test_c2_l01_tokens.py
+      min_tier: standard
+    - id: C2-L04
+      title: Attention
+      role: C2-L04
+      notebook: 4.Attention.ipynb
+      gate: test_c2_l04_attention.py
+      min_tier: standard
+    - id: C2-L08
+      title: Training loop
+      role: C2-L08
+      notebook: 8.Train.ipynb
+      gate: test_c2_l08_train.py
+      min_tier: standard
+    - id: C2-L12
+      title: MLA
+      role: C2-L12
+      notebook: 12.MLA.ipynb
+      gate: test_c2_l12_mla.py
+      min_tier: standard
+    - id: C2-L13
+      title: DeepSeek MoE
+      role: C2-L13
+      notebook: 13.DeepSeekMoE.ipynb
+      gate: test_c2_l13_moe.py
+      min_tier: standard
+    - id: C2-L15
+      title: Train DeepSeek-V2
+      role: C2-L15
+      notebook: 15.TrainDeepSeekV2.ipynb
+      gate: test_c2_l15_train_v2.py
+      min_tier: standard
+    - id: C2-L18
+      title: DeepSeek-V4 path
+      role: C2-L18
+      notebook: 18.DeepSeekV4Path.ipynb
+      gate: test_c2_l18_v4.py
+      min_tier: standard
+
+  c3_systems:
+    - id: C3-L01
+      title: V4 SwiGLU + hash-MoE gate
+      role: C3-L01
+      gate: test_c3_l01_v4_core.py
+      min_tier: standard
+    - id: C3-L06
+      title: make test_v4 (full C suite)
+      role: C3-L06
+      gate: test_c3_l06_v4_make.py
+      min_tier: standard
