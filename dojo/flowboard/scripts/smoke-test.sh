@@ -7,7 +7,7 @@ export FLOWBOARD_ENV="${FLOWBOARD_ENV:-$HOME/.cursor/flowboard.env}"
 
 echo "=== Flowboard smoke test ==="
 echo "Env file: ${FLOWBOARD_ENV}"
-echo "Holder:   ${FLOWBOARD_HOLDER:-Spm1CurorWorkbook (from env)}"
+echo "Holder:   ${FLOWBOARD_HOLDER:-Spm1CurorWorkbook}"
 echo ""
 
 out=$("$SCRIPT_DIR/flowboard.sh" list_boards)

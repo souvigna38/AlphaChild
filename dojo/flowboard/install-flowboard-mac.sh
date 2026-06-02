@@ -17,6 +17,7 @@ fi
 
 mkdir -p "$HOME/.cursor/skills/flowboard/scripts"
 cp "$REPO/dojo/flowboard/scripts/flowboard.sh" "$HOME/.cursor/skills/flowboard/scripts/"
+cp "$REPO/dojo/flowboard/scripts/load-flowboard-env.sh" "$HOME/.cursor/skills/flowboard/scripts/"
 cp "$REPO/dojo/flowboard/scripts/smoke-test.sh" "$HOME/.cursor/skills/flowboard/scripts/"
 chmod +x "$HOME/.cursor/skills/flowboard/scripts/"*.sh
 
@@ -33,5 +34,4 @@ echo ""
 echo "Installed scripts to ~/.cursor/skills/flowboard/scripts/"
 echo "Next:"
 echo "  nano ~/.cursor/flowboard.env    # paste FLOWBOARD_TOKEN=flb_..."
-echo "  source ~/.cursor/flowboard.env"
-echo "  ~/.cursor/skills/flowboard/scripts/smoke-test.sh"
+echo "  ~/.cursor/skills/flowboard/scripts/smoke-test.sh   # no need to source .env"

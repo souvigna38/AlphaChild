@@ -3,9 +3,10 @@
 set -euo pipefail
 
 ENV_FILE="${FLOWBOARD_ENV:-$HOME/.cursor/flowboard.env}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ -f "$ENV_FILE" ]]; then
-  # shellcheck disable=SC1090
-  set -a && source "$ENV_FILE" && set +a
+  # Do NOT use `source` — FLOWBOARD_UA contains () and breaks zsh
+  eval "$("$SCRIPT_DIR/load-flowboard-env.sh" "$ENV_FILE")"
 fi
 
 : "${FLOWBOARD_BASE:?Set FLOWBOARD_BASE in $ENV_FILE}"
