@@ -25,10 +25,13 @@ A **step-by-step Jupyter tutorial** that teaches the ideas behind [karpathy/llm.
 | 15 | `15.TrainDeepSeekV2.ipynb` | Train on tiny Shakespeare |
 | 16 | `16.SampleDeepSeekV2.ipynb` | Generate text |
 | 17 | `17.Phase5CBackward.ipynb` | C backward (MLA, 1-layer train) |
+| 18 | `18.DeepSeekV4Path.ipynb` | DeepSeek-V4 path (hash-MoE, SwiGLU, C `make test_v4`) |
 
-See **[docs/DEEPSEEK_VERSION_LADDER.md](docs/DEEPSEEK_VERSION_LADDER.md)** — we teach **V2** (not “V1”) after llm.c/GPT-2.
+See **[docs/DEEPSEEK_VERSION_LADDER.md](docs/DEEPSEEK_VERSION_LADDER.md)** — we teach **V2** after llm.c/GPT-2, then **V4** in notebook 18 + `c/`.
 
-**C port:** `cd c && make test_v2` (MLA, MoE, block, trainer). Export weights: `python scripts/export_v2_tiny.py --match-train-c`.
+**C port (V2):** `cd c && make test_v2` (MLA, MoE, block, trainer). Export weights: `python scripts/export_v2_tiny.py --match-train-c`.
+
+**C port (V4):** `cd c && make test_v4` (sliding/CSA/HCA, mHC, hash-MoE, full model smoke). See `docs/V4_SOURCES_AND_SCOPE.md`.
 
 ## Quick start
 
@@ -41,7 +44,7 @@ python3 -m pytest tests/ -v
 jupyter lab
 ```
 
-Open **`1.Tokens.ipynb`** and run cells in order through **`10`**, then **`11`–`16`** for DeepSeek-V2.
+Open **`1.Tokens.ipynb`** and run cells in order through **`10`**, then **`11`–`16`** for DeepSeek-V2, then **`17`–`18`** for C backward and the V4 path.
 
 ## Clone upstream llm.c (optional)
 
@@ -62,17 +65,17 @@ See **[AGENTS.md](AGENTS.md)** for full agent/human setup instructions.
 Keep the original tutorial on `main`; experiment on a **GitHub fork** and branch `feature/deepseek`.
 
 - **[FORK.md](FORK.md)** — how to fork (GitHub UI, CLI, local copy)  
-- **[docs/DEEPSEEK_VERSION_LADDER.md](docs/DEEPSEEK_VERSION_LADDER.md)** — why V2 after GPT-2 (active notebooks 11–16)  
-- **[docs/DEEPSEEK_ROADMAP.md](docs/DEEPSEEK_ROADMAP.md)** — optional DeepSeek-V4 notebook plan  
+- **[docs/DEEPSEEK_VERSION_LADDER.md](docs/DEEPSEEK_VERSION_LADDER.md)** — why V2 after GPT-2; notebook 18 + V4 C phases  
+- **[docs/DEEPSEEK_ROADMAP.md](docs/DEEPSEEK_ROADMAP.md)** — historical V4 notebook plan (largely implemented in 18 + `c/`)  
 - **[CURSOR_AGENT_FORK_DEEPSEEK.md](CURSOR_AGENT_FORK_DEEPSEEK.md)** — paste-ready task for another Cursor agent / OpenClaw
 
 ## Project layout
 
 ```
 llm-c-from-scratch/
-├── 1.Tokens.ipynb … 16.SampleDeepSeekV2.ipynb
-├── c/deepseek_v2/        # commented C port (MLA first)
-├── llmc/                 # importable package (used in tests + later notebooks)
+├── 1.Tokens.ipynb … 18.DeepSeekV4Path.ipynb
+├── c/                    # V2 + V4 C port (make test_v2, make test_v4)
+├── llmc/                 # importable package (used in tests + notebooks)
 ├── data/tiny_shakespeare.txt
 ├── tests/
 ├── pyproject.toml
