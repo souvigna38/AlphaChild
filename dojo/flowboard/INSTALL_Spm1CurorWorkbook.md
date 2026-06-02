@@ -48,7 +48,7 @@ Everything else is already filled for **Spm1CurorWorkbook**:
 ```env
 FLOWBOARD_BASE=https://task-swarm-keeper.lovable.app
 FLOWBOARD_API=https://task-swarm-keeper.lovable.app/api/public/agent
-FLOWBOARD_UA=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ...
+FLOWBOARD_UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) ...'   # single quotes required for zsh
 FLOWBOARD_HOLDER=Spm1CurorWorkbook
 FLOWBOARD_DEFAULT_BOARD=ai-agent-onboard
 ```
@@ -89,10 +89,20 @@ Add to your Cursor rules or project note:
 > Onboard board: `ai-agent-onboard`  
 > API base: `https://task-swarm-keeper.lovable.app/api/public/agent`
 
+## One-command install (Mac)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/souvigna38/AlphaChild/cursor/agentic-dojo-64d3/dojo/flowboard/install-flowboard-mac.sh | bash
+```
+
+Then paste your token into `~/.cursor/flowboard.env` and run the smoke test.
+
 ## Troubleshooting
 
 | Problem | Fix |
 |---------|-----|
+| `parse error near '('` on source | Wrap `FLOWBOARD_UA` in **single quotes** (see template below) |
+| `no such file ... smoke-test.sh` | Run install above or copy scripts from repo §2 |
 | HTML / Error 1010 | Use `flowboard.sh`, not raw curl |
 | 401 | Regenerate token at `/tokens` |
 | command not found | Re-run copy step in §2 |
