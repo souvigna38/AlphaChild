@@ -22,3 +22,11 @@ def data_path(root: Path | None = None) -> Path:
 
 def checkpoint_path(root: Path | None = None, name: str = "tiny_gpt.pt") -> Path:
     return (root or find_llm_root()) / "checkpoints" / name
+
+
+def c_dir(root: Path | None = None) -> Path:
+    return (root or find_llm_root()) / "c"
+
+
+def v2_checkpoint_path(root: Path | None = None, name: str = "v2_tiny.bin") -> Path:
+    return (root or find_llm_root()) / "checkpoints" / name

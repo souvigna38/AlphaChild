@@ -9,6 +9,8 @@ Out of the box implementation based on the code of the tutorial: [AlphaZero](htt
 
 See **[AGENTS.md](AGENTS.md)** for step-by-step instructions: clone, virtualenv, `pip install -e ".[dev,atari]"`, run tests, and start Jupyter.
 
+**Online course:** **[docs/ONLINE_COURSE.md](docs/ONLINE_COURSE.md)** — beginner curriculum for Track A (notebooks 1–16) and Track B (`llm-c-from-scratch/` 1–18).
+
 Quick start:
 
 ```bash

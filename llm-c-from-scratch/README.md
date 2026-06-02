@@ -36,13 +36,15 @@ See **[docs/DEEPSEEK_VERSION_LADDER.md](docs/DEEPSEEK_VERSION_LADDER.md)** — w
 ## Quick start
 
 ```bash
-git clone https://github.com/souvigna38/llm-c-from-scratch.git
-cd llm-c-from-scratch
+git clone https://github.com/souvigna38/AlphaChild.git
+cd AlphaChild/llm-c-from-scratch
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 python3 -m pytest tests/ -v
 jupyter lab
 ```
+
+**Full course guide (both tracks):** [../docs/ONLINE_COURSE.md](../docs/ONLINE_COURSE.md)
 
 Open **`1.Tokens.ipynb`** and run cells in order through **`10`**, then **`11`–`16`** for DeepSeek-V2, then **`17`–`18`** for C backward and the V4 path.
 
