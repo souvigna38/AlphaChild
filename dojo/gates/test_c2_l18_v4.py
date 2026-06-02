@@ -6,7 +6,7 @@ from llmc.deepseek_v4 import SwiGLUExpert, HashMoE, DeepSeekV4Config
 
 
 def test_v4_modules():
-    cfg = DeepSeekV4Config(vocab_size=64, hidden_size=32, moe_intermediate_size=48)
+    cfg = DeepSeekV4Config.tiny(vocab_size=64)
     expert = SwiGLUExpert(cfg)
     x = torch.randn(2, 8, cfg.hidden_size)
     y = expert(x)

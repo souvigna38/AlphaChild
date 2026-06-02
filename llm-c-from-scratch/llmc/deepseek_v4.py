@@ -60,6 +60,26 @@ class DeepSeekV4Config:
                 "hash_moe" if i < self.num_hash_layers else "moe" for i in range(self.num_hidden_layers)
             ]
 
+    @classmethod
+    def tiny(cls, vocab_size: int = 64, block_size: int = 32) -> DeepSeekV4Config:
+        """Fast config for notebooks, pytest, and Dojo gate C2-L18 (Mac-friendly)."""
+        return cls(
+            vocab_size=vocab_size,
+            hidden_size=32,
+            moe_intermediate_size=48,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=1,
+            head_dim=16,
+            q_lora_rank=16,
+            num_experts_per_tok=2,
+            n_routed_experts=4,
+            n_shared_experts=1,
+            num_hash_layers=2,
+            hc_mult=2,
+            sliding_window=8,
+        )
+
 
 class RMSNorm(nn.Module):
     def __init__(self, hidden: int, eps: float) -> None:
