@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+muzero_gym_*.pt
+muzero_cartpole_*.pt
+dojo/dojo_state.sqlite
+dojo/.env
