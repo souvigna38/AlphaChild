@@ -7,6 +7,8 @@ import json
 import re
 from pathlib import Path
 
+from learning_objectives import ALPHA_OBJECTIVES, format_objectives
+
 ROOT = Path(__file__).resolve().parents[1]
 
 SETUP = """\
@@ -141,11 +143,14 @@ def has_setup(nb: dict) -> bool:
     )
 
 
-def intro_cell(title: str, before: str, body: str) -> dict:
+def intro_cell(title: str, before: str, body: str, filename: str) -> dict:
+    objectives = ALPHA_OBJECTIVES.get(filename, [])
+    obj_block = ("\n\n" + format_objectives(objectives)) if objectives else ""
     text = (
         f"# {title}\n\n"
         f"**Before:** {before}\n\n"
-        f"**This notebook:** {body}\n\n"
+        f"**This notebook:** {body}"
+        f"{obj_block}\n\n"
         "**Online course:** run cells top-to-bottom. In setup, keep `RUN_TRAIN=False` "
         "until you want a long training run. Set `PLAY_INTERACTIVE=True` only to play in the terminal.\n\n"
         "**Install:** `pip install -e \".[dev,atari]\"` from the AlphaChild repo root.\n\n"
@@ -203,8 +208,11 @@ def patch_source(src: str) -> str:
 def patch_notebook(path: Path) -> None:
     nb = json.loads(path.read_text())
     meta = COURSE.get(path.name)
-    if meta and not (nb["cells"] and "Online course" in _src(nb["cells"][0])):
-        nb["cells"].insert(0, intro_cell(*meta))
+    if meta:
+        if nb["cells"] and nb["cells"][0].get("cell_type") == "markdown":
+            _set_src(nb["cells"][0], _src(intro_cell(*meta, path.name)))
+        else:
+            nb["cells"].insert(0, intro_cell(*meta, path.name))
     if not has_setup(nb):
         idx = 1 if nb["cells"] and nb["cells"][0].get("cell_type") == "markdown" else 0
         nb["cells"].insert(idx, setup_cell())

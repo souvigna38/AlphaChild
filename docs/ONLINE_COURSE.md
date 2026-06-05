@@ -29,10 +29,16 @@ Open notebooks **in numeric order** within each track.
 
 Every course-ready notebook includes:
 
-1. **Markdown intro** — what you’ll learn, prerequisites, next notebook
+1. **Markdown intro** — prerequisites, summary, and **learning objectives** (bullet list)
 2. **Setup cell** — finds the repo root automatically (works in Cursor workbook / nested clones)
 3. **Code cells** — run top-to-bottom; no hidden state required
 4. **Gated slow cells** — training, C compiles, and human `input()` play are **off by default**
+
+Objectives live in each notebook’s first markdown cell. To regenerate them from source:
+
+```bash
+python3 scripts/add_learning_objectives.py
+```
 
 ### Track A flags (setup cell)
 
@@ -145,9 +151,10 @@ Pin curriculum: `git checkout course-2026.1`
 
 ## Regenerate course notebooks
 
-After editing patch templates:
+After editing patch templates or learning objectives (`scripts/learning_objectives.py`):
 
 ```bash
+python3 scripts/add_learning_objectives.py
 python3 llm-c-from-scratch/scripts/patch_notebooks_course.py
 python3 scripts/patch_alphazero_notebooks.py
 ```

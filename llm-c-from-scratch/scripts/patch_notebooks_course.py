@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT.parents[1] / "scripts"))
+from learning_objectives import LLM_OBJECTIVES, format_objectives  # noqa: E402
 
 SETUP = """\
 # --- Setup: find repo root (llm-c-from-scratch or Cursor workbook) ---
@@ -148,19 +151,22 @@ def patch_cell(cell: dict) -> None:
     cell["execution_count"] = None
 
 
-def ensure_course_header(nb: dict, title: str, before: str, body: str, dojo: str = "") -> None:
+def ensure_course_header(
+    nb: dict, title: str, before: str, body: str, dojo: str = "", filename: str = ""
+) -> None:
+    objectives = LLM_OBJECTIVES.get(filename, [])
+    obj_block = ("\n\n" + format_objectives(objectives) + "\n\n") if objectives else "\n\n"
     header = (
         f"# {title}\n\n"
         f"**Before:** {before}\n\n"
-        f"**This notebook:** {body}\n\n"
+        f"**This notebook:** {body}\n"
+        f"{obj_block}"
         "**Online course:** run cells **top-to-bottom**. Setup cell must print `data OK`.\n\n"
     )
     if dojo:
         header += f"**Dojo (optional):** `{dojo}`\n"
     if nb["cells"] and nb["cells"][0].get("cell_type") == "markdown":
-        existing = _src(nb["cells"][0])
-        if "Online course" not in existing:
-            _set_src(nb["cells"][0], header + "\n" + existing.lstrip("# ").split("\n", 1)[-1] if existing.startswith("#") else header + existing)
+        _set_src(nb["cells"][0], header)
     else:
         nb["cells"].insert(0, {"cell_type": "markdown", "metadata": {}, "source": []})
         _set_src(nb["cells"][0], header)
@@ -169,7 +175,7 @@ def ensure_course_header(nb: dict, title: str, before: str, body: str, dojo: str
 def patch_notebook(path: Path, meta: dict | None = None) -> None:
     nb = json.loads(path.read_text())
     if meta:
-        ensure_course_header(nb, **meta)
+        ensure_course_header(nb, filename=path.name, **meta)
     remove_stale_setup_cells(nb)
     if not has_setup(nb):
         idx = 0
